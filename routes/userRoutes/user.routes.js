@@ -1,0 +1,68 @@
+/**
+ * USER ROUTES
+ * 
+ * Routes for user management operations.
+ * Customers can manage their own profile.
+ * Admins can manage all users.
+ */
+
+const express = require('express');
+const router = express.Router();
+const userController = require('../../controllers/userControllers/user.controller');
+const authenticate = require('../../middlewares/auth.middleware');
+const { requireAdmin } = require('../../middlewares/role.middleware');
+
+// ============================================
+// CUSTOMER ROUTES (Own Profile)
+// ============================================
+
+// Get own profile
+router.get('/api/users/me', authenticate, userController.getMyProfile);
+
+// Update own profile
+router.put('/api/users/me', authenticate, userController.updateMyProfile);
+
+// Get own statistics
+router.get('/api/users/me/statistics', authenticate, userController.getMyStatistics);
+
+// Delete own account
+router.delete('/api/users/me', authenticate, userController.deleteMyAccount);
+
+// ============================================
+// ADMIN ROUTES (All Users)
+// ============================================
+
+// Search users (must be before /:id to avoid conflict)
+router.get('/api/users/search', authenticate, requireAdmin, userController.searchUsers);
+
+// Get all users
+router.get('/api/users', authenticate, requireAdmin, userController.getAllUsers);
+
+// Create user
+router.post('/api/users', authenticate, requireAdmin, userController.createUser);
+
+// Get user by ID
+router.get('/api/users/:id', authenticate, requireAdmin, userController.getUserById);
+
+// Update user
+router.put('/api/users/:id', authenticate, requireAdmin, userController.updateUser);
+
+// Delete user
+router.delete('/api/users/:id', authenticate, requireAdmin, userController.deleteUser);
+
+// Get user statistics
+router.get('/api/users/:id/statistics', authenticate, requireAdmin, userController.getUserStatistics);
+
+// Update user status
+router.patch('/api/users/:id/status', authenticate, requireAdmin, userController.updateUserStatus);
+
+// Block user
+router.post('/api/users/:id/block', authenticate, requireAdmin, userController.blockUser);
+
+// Unblock user
+router.post('/api/users/:id/unblock', authenticate, requireAdmin, userController.unblockUser);
+
+// Assign role
+router.patch('/api/users/:id/role', authenticate, requireAdmin, userController.assignRole);
+
+module.exports = router;
