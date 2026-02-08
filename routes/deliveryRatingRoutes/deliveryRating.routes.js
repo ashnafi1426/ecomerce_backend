@@ -17,7 +17,7 @@ const roleMiddleware = require('../../middlewares/role.middleware');
 router.post(
   '/',
   authMiddleware,
-  roleMiddleware(['Customer']),
+  roleMiddleware.requireRole('customer'),
   deliveryRatingController.submitDeliveryRating
 );
 
@@ -44,7 +44,7 @@ router.get(
 router.get(
   '/analytics',
   authMiddleware,
-  roleMiddleware(['Manager', 'Admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   deliveryRatingController.getDeliveryRatingAnalytics
 );
 
@@ -52,7 +52,7 @@ router.get(
 router.get(
   '/flagged',
   authMiddleware,
-  roleMiddleware(['Manager', 'Admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   deliveryRatingController.getFlaggedRatings
 );
 
@@ -60,7 +60,7 @@ router.get(
 router.put(
   '/:ratingId/flag',
   authMiddleware,
-  roleMiddleware(['Manager', 'Admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   deliveryRatingController.flagRating
 );
 

@@ -72,7 +72,7 @@ router.use(notificationRouter);
 router.use(disputeRouter);
 
 // Phase 6: Product Variants System
-router.use(variantRouter);
+router.use('/api/variants', variantRouter);
 
 // Discount and Promotion System
 router.use('/api/coupons', couponRouter);

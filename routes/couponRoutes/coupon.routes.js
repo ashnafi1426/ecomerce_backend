@@ -10,7 +10,7 @@ const roleMiddleware = require('../../middlewares/role.middleware');
  */
 
 // Public routes (require authentication)
-router.use(authMiddleware.protect);
+router.use(authMiddleware);
 
 /**
  * @route   POST /api/v1/coupons/validate
@@ -55,7 +55,7 @@ router.get('/code/:code', couponController.getCouponByCode);
  */
 router.post(
   '/',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.createCoupon
 );
 
@@ -66,7 +66,7 @@ router.post(
  */
 router.get(
   '/',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.getAllCoupons
 );
 
@@ -77,7 +77,7 @@ router.get(
  */
 router.get(
   '/analytics',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.getOverallCouponAnalytics
 );
 
@@ -88,7 +88,7 @@ router.get(
  */
 router.get(
   '/:id',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.getCouponById
 );
 
@@ -99,7 +99,7 @@ router.get(
  */
 router.get(
   '/:id/analytics',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.getCouponAnalytics
 );
 
@@ -110,7 +110,7 @@ router.get(
  */
 router.put(
   '/:id',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.updateCoupon
 );
 
@@ -121,7 +121,7 @@ router.put(
  */
 router.put(
   '/:id/deactivate',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.deactivateCoupon
 );
 
@@ -132,7 +132,7 @@ router.put(
  */
 router.delete(
   '/:id',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   couponController.deleteCoupon
 );
 

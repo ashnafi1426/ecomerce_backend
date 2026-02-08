@@ -696,6 +696,187 @@ const getOrderWithReplacements = async (orderId) => {
   };
 };
 
+/**
+ * Get order refund history
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Array>} Array of refund records
+ */
+async function getOrderRefundHistory(orderId) {
+  const { data, error } = await supabase
+    .from('refund_details')
+    .select(`
+      *,
+      processed_by_user:users!refund_details_processed_by_fkey(id, full_name, email)
+    `)
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  
+  return data || [];
+}
+
+/**
+ * Get order refund summary
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Refund summary with totals
+ */
+async function getOrderRefundSummary(orderId) {
+  const refunds = await getOrderRefundHistory(orderId);
+  
+  if (!refunds || refunds.length === 0) {
+    return {
+      total_refunded: 0,
+      refund_count: 0,
+      has_refunds: false,
+      refunds: []
+    };
+  }
+  
+  // Calculate total refunded amount (only approved refunds)
+  const approvedRefunds = refunds.filter(r => r.status === 'approved');
+  const totalRefunded = approvedRefunds.reduce((sum, refund) => {
+    return sum + parseFloat(refund.refund_amount || 0);
+  }, 0);
+  
+  return {
+    total_refunded: totalRefunded,
+    refund_count: refunds.length,
+    approved_count: approvedRefunds.length,
+    has_refunds: true,
+    refunds: refunds
+  };
+}
+
+/**
+ * Update order refund status
+ * @param {String} orderId - Order UUID
+ * @param {Number} refundAmount - Amount being refunded
+ * @returns {Promise<Object>} Updated order
+ */
+async function updateOrderRefundStatus(orderId, refundAmount) {
+  // Get current order
+  const order = await findById(orderId);
+  if (!order) {
+    throw new Error('Order not found');
+  }
+  
+  // Get refund summary
+  const refundSummary = await getOrderRefundSummary(orderId);
+  const totalRefunded = refundSummary.total_refunded + refundAmount;
+  
+  // Determine new status
+  let newStatus = order.status;
+  const orderTotal = parseFloat(order.total_amount || 0);
+  
+  if (totalRefunded >= orderTotal) {
+    // Full refund
+    newStatus = 'refunded';
+  } else if (totalRefunded > 0) {
+    // Partial refund
+    newStatus = 'partially_refunded';
+  }
+  
+  // Update order status
+  const { data, error } = await supabase
+    .from('orders')
+    .update({
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', orderId)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  return data;
+}
+
+/**
+ * Get order with refund details
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Order with refund information
+ */
+async function getOrderWithRefunds(orderId) {
+  const order = await findById(orderId);
+  if (!order) {
+    return null;
+  }
+  
+  const refundSummary = await getOrderRefundSummary(orderId);
+  
+  return {
+    ...order,
+    refund_summary: refundSummary
+  };
+}
+
+/**
+ * Check if order is eligible for refund
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Eligibility status and reason
+ */
+async function isEligibleForRefund(orderId) {
+  const order = await findById(orderId);
+  
+  if (!order) {
+    return {
+      eligible: false,
+      reason: 'Order not found'
+    };
+  }
+  
+  // Check if order is in a refundable status
+  const refundableStatuses = ['delivered', 'completed', 'partially_refunded'];
+  if (!refundableStatuses.includes(order.status)) {
+    return {
+      eligible: false,
+      reason: `Order status '${order.status}' is not eligible for refund`
+    };
+  }
+  
+  // Check if already fully refunded
+  if (order.status === 'refunded') {
+    return {
+      eligible: false,
+      reason: 'Order has already been fully refunded'
+    };
+  }
+  
+  // Get refund summary to check cumulative refunds
+  const refundSummary = await getOrderRefundSummary(orderId);
+  const orderTotal = parseFloat(order.total_amount || 0);
+  
+  if (refundSummary.total_refunded >= orderTotal) {
+    return {
+      eligible: false,
+      reason: 'Order has already been fully refunded'
+    };
+  }
+  
+  // Check 30-day window from delivery
+  if (order.delivered_at) {
+    const deliveryDate = new Date(order.delivered_at);
+    const now = new Date();
+    const daysSinceDelivery = (now - deliveryDate) / (1000 * 60 * 60 * 24);
+    
+    if (daysSinceDelivery > 30) {
+      return {
+        eligible: false,
+        reason: 'Refund window has expired (30 days from delivery)'
+      };
+    }
+  }
+  
+  return {
+    eligible: true,
+    remaining_refundable: orderTotal - refundSummary.total_refunded,
+    order_total: orderTotal,
+    total_refunded: refundSummary.total_refunded
+  };
+}
+
 module.exports = {
   findById,
   findByUserId,
@@ -710,5 +891,11 @@ module.exports = {
   isEligibleForDeliveryRating,
   getOrderWithDeliveryRating,
   isEligibleForReplacement,
-  getOrderWithReplacements
+  getOrderWithReplacements,
+  // Refund integration functions
+  getOrderRefundHistory,
+  getOrderRefundSummary,
+  updateOrderRefundStatus,
+  getOrderWithRefunds,
+  isEligibleForRefund
 };

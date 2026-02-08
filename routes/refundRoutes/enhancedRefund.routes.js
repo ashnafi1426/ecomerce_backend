@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const enhancedRefundController = require('../../controllers/refundControllers/enhancedRefund.controller');
-const { authenticateToken } = require('../../middlewares/auth.middleware');
-const { requireRole } = require('../../middlewares/role.middleware');
+const authenticate = require('../../middlewares/auth.middleware');
+const { requireRole, requireAnyRole } = require('../../middlewares/role.middleware');
 
 /**
  * Enhanced Refund Routes
@@ -21,8 +21,8 @@ const { requireRole } = require('../../middlewares/role.middleware');
  */
 router.post(
   '/',
-  authenticateToken,
-  requireRole(['customer']),
+  authenticate,
+  requireRole('customer'),
   enhancedRefundController.createRefundRequest
 );
 
@@ -33,7 +33,7 @@ router.post(
  */
 router.get(
   '/:id',
-  authenticateToken,
+  authenticate,
   enhancedRefundController.getRefundRequest
 );
 
@@ -45,7 +45,7 @@ router.get(
  */
 router.get(
   '/',
-  authenticateToken,
+  authenticate,
   enhancedRefundController.getAllRefunds
 );
 
@@ -61,8 +61,8 @@ router.get(
  */
 router.post(
   '/:id/process-partial',
-  authenticateToken,
-  requireRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   enhancedRefundController.processPartialRefund
 );
 
@@ -74,8 +74,8 @@ router.post(
  */
 router.post(
   '/:id/process-full',
-  authenticateToken,
-  requireRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   enhancedRefundController.processFullRefund
 );
 
@@ -86,8 +86,8 @@ router.post(
  */
 router.post(
   '/:id/reject',
-  authenticateToken,
-  requireRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   enhancedRefundController.rejectRefund
 );
 
@@ -99,8 +99,8 @@ router.post(
  */
 router.get(
   '/analytics',
-  authenticateToken,
-  requireRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   enhancedRefundController.getRefundAnalytics
 );
 
@@ -112,8 +112,8 @@ router.get(
  */
 router.post(
   '/goodwill',
-  authenticateToken,
-  requireRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   enhancedRefundController.issueGoodwillRefund
 );
 

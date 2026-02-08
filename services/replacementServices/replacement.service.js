@@ -428,4 +428,16 @@ async function reserveReplacementInventory(requestId) {
   if (replacement.variant_id) {
     await variantInventoryService.reserveInventory(replacement.variant_id, replacement.quantity);
   } else {
-    await inventoryService
+    await inventoryService.reserveInventory(replacement.product_id, replacement.quantity);
+  }
+}
+
+module.exports = {
+  createReplacementRequest,
+  getReplacementRequest,
+  approveReplacement,
+  rejectReplacement,
+  updateReplacementShipment,
+  getReplacementAnalytics,
+  reserveReplacementInventory
+};

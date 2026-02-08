@@ -10,7 +10,7 @@ const roleMiddleware = require('../../middlewares/role.middleware');
  */
 
 // Public routes (require authentication)
-router.use(authMiddleware.protect);
+router.use(authMiddleware);
 
 /**
  * @route   GET /api/v1/promotions/active
@@ -50,7 +50,7 @@ router.get('/product/:productId', promotionController.getPromotionsByProduct);
  */
 router.post(
   '/',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.createPromotion
 );
 
@@ -61,7 +61,7 @@ router.post(
  */
 router.post(
   '/bulk',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.bulkCreatePromotions
 );
 
@@ -72,7 +72,7 @@ router.post(
  */
 router.post(
   '/process-scheduled',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.processScheduledPromotions
 );
 
@@ -83,7 +83,7 @@ router.post(
  */
 router.get(
   '/',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.getAllPromotions
 );
 
@@ -94,7 +94,7 @@ router.get(
  */
 router.get(
   '/:id',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.getPromotionById
 );
 
@@ -105,7 +105,7 @@ router.get(
  */
 router.get(
   '/:id/analytics',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.getPromotionAnalytics
 );
 
@@ -116,7 +116,7 @@ router.get(
  */
 router.put(
   '/:id',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.updatePromotion
 );
 
@@ -127,7 +127,7 @@ router.put(
  */
 router.delete(
   '/:id',
-  roleMiddleware.checkRole(['manager', 'admin']),
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   promotionController.deletePromotion
 );
 

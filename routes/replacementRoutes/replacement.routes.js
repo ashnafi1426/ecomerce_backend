@@ -16,8 +16,8 @@ const roleMiddleware = require('../../middlewares/role.middleware');
  */
 router.post(
   '/',
-  authMiddleware.protect,
-  roleMiddleware.checkRole(['customer']),
+  authMiddleware,
+  roleMiddleware.requireRole('customer'),
   replacementController.createReplacementRequest
 );
 
@@ -28,7 +28,7 @@ router.post(
  */
 router.get(
   '/',
-  authMiddleware.protect,
+  authMiddleware,
   replacementController.getReplacementRequests
 );
 
@@ -39,8 +39,8 @@ router.get(
  */
 router.get(
   '/analytics',
-  authMiddleware.protect,
-  roleMiddleware.checkRole(['manager', 'admin']),
+  authMiddleware,
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   replacementController.getReplacementAnalytics
 );
 
@@ -51,7 +51,7 @@ router.get(
  */
 router.get(
   '/:id',
-  authMiddleware.protect,
+  authMiddleware,
   replacementController.getReplacementRequest
 );
 
@@ -62,8 +62,8 @@ router.get(
  */
 router.put(
   '/:id/approve',
-  authMiddleware.protect,
-  roleMiddleware.checkRole(['manager', 'admin']),
+  authMiddleware,
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   replacementController.approveReplacement
 );
 
@@ -74,8 +74,8 @@ router.put(
  */
 router.put(
   '/:id/reject',
-  authMiddleware.protect,
-  roleMiddleware.checkRole(['manager', 'admin']),
+  authMiddleware,
+  roleMiddleware.requireAnyRole(['manager', 'admin']),
   replacementController.rejectReplacement
 );
 
@@ -86,8 +86,8 @@ router.put(
  */
 router.put(
   '/:id/shipment',
-  authMiddleware.protect,
-  roleMiddleware.checkRole(['seller']),
+  authMiddleware,
+  roleMiddleware.requireRole('seller'),
   replacementController.updateReplacementShipment
 );
 
@@ -98,8 +98,8 @@ router.put(
  */
 router.put(
   '/:id/return-tracking',
-  authMiddleware.protect,
-  roleMiddleware.checkRole(['customer']),
+  authMiddleware,
+  roleMiddleware.requireRole('customer'),
   replacementController.updateReturnTracking
 );
 
@@ -110,8 +110,8 @@ router.put(
  */
 router.put(
   '/:id/confirm-return',
-  authMiddleware.protect,
-  roleMiddleware.checkRole(['seller']),
+  authMiddleware,
+  roleMiddleware.requireRole('seller'),
   replacementController.confirmReturnReceived
 );
 
