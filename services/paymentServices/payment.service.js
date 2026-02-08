@@ -268,13 +268,16 @@ const storeTransaction = async (paymentData) => {
  * REQUIREMENT 4: Process refund
  * 
  * ADMIN ONLY: Refund processing with inventory restoration
+ * Enhanced to support partial refunds with commission adjustments
+ * Implements Requirements 5.6, 5.15
  * 
  * @param {String} paymentId - Payment UUID
  * @param {Number} amount - Amount to refund (optional, full refund if not specified)
  * @param {String} reason - Refund reason
+ * @param {Object} options - Additional options (isPartial, commissionAdjustment, sellerDeduction)
  * @returns {Promise<Object>} Refund result
  */
-const processRefund = async (paymentId, amount = null, reason = 'requested_by_customer') => {
+const processRefund = async (paymentId, amount = null, reason = 'requested_by_customer', options = {}) => {
   // Get payment record
   const payment = await findById(paymentId);
   
@@ -286,22 +289,157 @@ const processRefund = async (paymentId, amount = null, reason = 'requested_by_cu
     throw new Error('Can only refund successful payments');
   }
 
+  // Determine refund amount (full or partial)
+  const refundAmount = amount || payment.amount;
+  
+  // Validate refund amount
+  if (refundAmount > payment.amount) {
+    throw new Error('Refund amount cannot exceed payment amount');
+  }
+
+  // Determine if this is a partial refund
+  const isPartial = refundAmount < payment.amount;
+
   // Create refund in Stripe
-  const refund = await createRefund(payment.payment_intent_id, amount, reason);
+  const refund = await createRefund(payment.payment_intent_id, refundAmount, reason);
 
-  // Update payment status
-  await updateStatus(payment.id, 'refunded');
+  // Update payment status based on refund type
+  if (isPartial) {
+    // For partial refunds, keep status as succeeded but track refund
+    await supabase
+      .from('payments')
+      .update({ 
+        refunded_amount: refundAmount,
+        last_refund_at: new Date().toISOString()
+      })
+      .eq('id', payment.id);
+  } else {
+    // For full refunds, update status to refunded
+    await updateStatus(payment.id, 'refunded');
+  }
 
-  // Update order status
-  await orderService.updateStatus(payment.order_id, 'refunded');
+  // Update order status based on refund type
+  if (isPartial) {
+    await orderService.updateStatus(payment.order_id, 'partially_refunded');
+  } else {
+    await orderService.updateStatus(payment.order_id, 'refunded');
+  }
 
-  // TODO: Restore inventory (implement in Phase 4)
+  // Handle commission reversal if provided
+  if (options.commissionAdjustment && options.sellerDeduction) {
+    await processCommissionReversal(
+      payment.order_id,
+      options.commissionAdjustment,
+      options.sellerDeduction
+    );
+  }
 
   return {
     refund,
     payment: await findById(payment.id),
-    message: 'Refund processed successfully'
+    isPartial,
+    refundAmount,
+    message: isPartial ? 'Partial refund processed successfully' : 'Full refund processed successfully'
   };
+};
+
+/**
+ * Process commission reversal for refunds
+ * Implements Requirements 5.6, 5.15
+ * 
+ * @param {String} orderId - Order UUID
+ * @param {Number} commissionAmount - Commission to reverse
+ * @param {Number} sellerDeduction - Amount to deduct from seller
+ * @returns {Promise<void>}
+ */
+const processCommissionReversal = async (orderId, commissionAmount, sellerDeduction) => {
+  try {
+    // Get order details to find seller
+    const order = await orderService.findById(orderId);
+    if (!order) {
+      throw new Error('Order not found for commission reversal');
+    }
+
+    // Get sub-orders to find sellers
+    const { data: subOrders, error: subOrderError } = await supabase
+      .from('sub_orders')
+      .select('seller_id, total_amount')
+      .eq('parent_order_id', orderId);
+
+    if (subOrderError) throw subOrderError;
+
+    // Process commission reversal for each seller
+    for (const subOrder of subOrders) {
+      // Calculate proportional deduction for this seller
+      const sellerProportion = subOrder.total_amount / order.amount;
+      const sellerDeductionAmount = sellerDeduction * sellerProportion;
+
+      // Update seller balance
+      const { data: sellerBalance, error: balanceError } = await supabase
+        .from('seller_balances')
+        .select('*')
+        .eq('seller_id', subOrder.seller_id)
+        .single();
+
+      if (balanceError && balanceError.code !== 'PGRST116') {
+        console.error('Error fetching seller balance:', balanceError);
+        continue;
+      }
+
+      if (sellerBalance) {
+        // Deduct from seller balance
+        await supabase
+          .from('seller_balances')
+          .update({
+            available_balance: sellerBalance.available_balance - sellerDeductionAmount,
+            pending_balance: sellerBalance.pending_balance,
+            total_refunded: (sellerBalance.total_refunded || 0) + sellerDeductionAmount,
+            updated_at: new Date().toISOString()
+          })
+          .eq('seller_id', subOrder.seller_id);
+      }
+    }
+
+    console.log(`Commission reversal processed: ${commissionAmount}, Seller deduction: ${sellerDeduction}`);
+  } catch (error) {
+    console.error('Error processing commission reversal:', error);
+    throw error;
+  }
+};
+
+/**
+ * Process partial refund through payment gateway
+ * Implements Requirements 5.1, 5.2, 5.6
+ * 
+ * @param {String} orderId - Order UUID
+ * @param {Number} amount - Partial refund amount
+ * @param {Object} commissionData - Commission adjustment data
+ * @returns {Promise<Object>} Refund result
+ */
+const processPartialRefund = async (orderId, amount, commissionData = {}) => {
+  try {
+    // Find payment by order ID
+    const payment = await findByOrderId(orderId);
+    
+    if (!payment) {
+      throw new Error('Payment not found for order');
+    }
+
+    // Process the refund with commission adjustments
+    return await processRefund(
+      payment.id,
+      amount,
+      'partial_refund',
+      {
+        isPartial: true,
+        commissionAdjustment: commissionData.commission,
+        sellerDeduction: commissionData.sellerAmount
+      }
+    );
+  } catch (error) {
+    console.error('Error processing partial refund:', error);
+    throw error;
+  }
 };
 
 /**
@@ -428,6 +566,8 @@ module.exports = {
   createPaymentIntentForOrder,
   storeTransaction,
   processRefund,
+  processPartialRefund,
+  processCommissionReversal,
   syncPaymentStatus,
   handleWebhookEvent,
   getPaymentByOrder

@@ -146,8 +146,8 @@ class EnhancedRefundService {
         throw updateError;
       }
 
-      // Process payment refund
-      await this.processPaymentRefund(refund.order_id, amount);
+      // Process payment refund with commission data
+      await this.processPaymentRefund(refund.order_id, amount, commissionAdjustment);
 
       // Update order status to partially refunded
       const { error: orderUpdateError } = await supabase
@@ -214,8 +214,8 @@ class EnhancedRefundService {
 
       if (updateError) throw updateError;
 
-      // Process payment refund
-      await this.processPaymentRefund(refund.order_id, refund.refund_amount);
+      // Process payment refund with commission data
+      await this.processPaymentRefund(refund.order_id, refund.refund_amount, commissionAdjustment);
 
       // Update order status to refunded
       await supabase
@@ -456,8 +456,8 @@ class EnhancedRefundService {
 
       if (refundError) throw refundError;
 
-      // Process payment refund
-      await this.processPaymentRefund(orderId, amount);
+      // Process payment refund (no commission adjustment for goodwill)
+      await this.processPaymentRefund(orderId, amount, {});
 
       return refund;
     } catch (error) {
