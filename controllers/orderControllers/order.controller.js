@@ -257,6 +257,133 @@ const getRecentOrders = async (req, res, next) => {
   }
 };
 
+/**
+ * Get order refund history
+ * GET /api/v1/orders/:id/refunds
+ * @access Customer (own orders), Manager, Admin
+ */
+const getOrderRefunds = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Get order to check ownership
+    const order = await orderService.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Authorization check
+    if (userRole === 'customer' && order.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view this order'
+      });
+    }
+
+    const refundHistory = await orderService.getOrderRefundHistory(id);
+
+    res.status(200).json({
+      success: true,
+      data: refundHistory
+    });
+  } catch (error) {
+    console.error('Error getting order refunds:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get order refunds'
+    });
+  }
+};
+
+/**
+ * Get order with refund details
+ * GET /api/v1/orders/:id/with-refunds
+ * @access Customer (own orders), Manager, Admin
+ */
+const getOrderWithRefunds = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const orderWithRefunds = await orderService.getOrderWithRefunds(id);
+    
+    if (!orderWithRefunds) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Authorization check
+    if (userRole === 'customer' && orderWithRefunds.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view this order'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: orderWithRefunds
+    });
+  } catch (error) {
+    console.error('Error getting order with refunds:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get order with refunds'
+    });
+  }
+};
+
+/**
+ * Check if order is eligible for refund
+ * GET /api/v1/orders/:id/refund-eligibility
+ * @access Customer (own orders), Manager, Admin
+ */
+const checkRefundEligibility = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Get order to check ownership
+    const order = await orderService.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Authorization check
+    if (userRole === 'customer' && order.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view this order'
+      });
+    }
+
+    const eligibility = await orderService.isEligibleForRefund(id);
+
+    res.status(200).json({
+      success: true,
+      data: eligibility
+    });
+  } catch (error) {
+    console.error('Error checking refund eligibility:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to check refund eligibility'
+    });
+  }
+};
+
 module.exports = {
   createOrder,
   getMyOrders,
@@ -266,5 +393,9 @@ module.exports = {
   getAllOrders,
   updateOrderStatus,
   getStatistics,
-  getRecentOrders
+  getRecentOrders,
+  // Refund integration endpoints
+  getOrderRefunds,
+  getOrderWithRefunds,
+  checkRefundEligibility
 };

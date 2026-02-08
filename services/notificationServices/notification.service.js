@@ -19,10 +19,11 @@ const createNotification = async (userId, notificationData) => {
     .from('notifications')
     .insert([{
       user_id: userId,
-      type: notificationData.type,
+      notification_type: notificationData.type,
       title: notificationData.title,
       message: notificationData.message,
-      data: notificationData.data || null,
+      related_entity_type: notificationData.entityType || null,
+      related_entity_id: notificationData.entityId || null,
       priority: notificationData.priority || 'normal'
     }])
     .select()
@@ -191,6 +192,215 @@ const deleteOldNotifications = async (daysOld = 30) => {
   return data ? data.length : 0;
 };
 
+// ============================================
+// CRITICAL FEATURES NOTIFICATIONS
+// ============================================
+
+/**
+ * Notify customer about delivery rating submission
+ * Implements Requirement 3.5
+ * @param {String} customerId - Customer UUID
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyDeliveryRatingSubmitted = async (customerId, orderId) => {
+  return await createNotification(customerId, {
+    type: 'new_review',
+    title: 'Delivery Rating Submitted',
+    message: 'Thank you for rating your delivery experience!',
+    entityType: 'order',
+    entityId: orderId,
+    priority: 'normal'
+  });
+};
+
+/**
+ * Notify seller about low delivery rating
+ * Implements Requirement 3.5
+ * @param {String} sellerId - Seller UUID
+ * @param {String} orderId - Order UUID
+ * @param {Number} rating - Rating value
+ * @returns {Promise<Object>} Created notification
+ */
+const notifySellerLowDeliveryRating = async (sellerId, orderId, rating) => {
+  return await createNotification(sellerId, {
+    type: 'new_review',
+    title: 'Low Delivery Rating Received',
+    message: `You received a ${rating}-star delivery rating. Please review your delivery process.`,
+    entityType: 'order',
+    entityId: orderId,
+    priority: 'high'
+  });
+};
+
+/**
+ * Notify customer about replacement request received
+ * Implements Requirement 4.4
+ * @param {String} customerId - Customer UUID
+ * @param {String} replacementId - Replacement request UUID
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyReplacementRequestReceived = async (customerId, replacementId) => {
+  return await createNotification(customerId, {
+    type: 'return_requested',
+    title: 'Replacement Request Received',
+    message: 'Your replacement request has been received and is being reviewed.',
+    entityType: 'replacement',
+    entityId: replacementId,
+    priority: 'normal'
+  });
+};
+
+/**
+ * Notify customer about replacement request approval
+ * Implements Requirement 4.4
+ * @param {String} customerId - Customer UUID
+ * @param {String} replacementId - Replacement request UUID
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyReplacementApproved = async (customerId, replacementId) => {
+  return await createNotification(customerId, {
+    type: 'return_approved',
+    title: 'Replacement Request Approved',
+    message: 'Your replacement request has been approved. Your replacement will be shipped soon.',
+    entityType: 'replacement',
+    entityId: replacementId,
+    priority: 'high'
+  });
+};
+
+/**
+ * Notify customer about replacement request rejection
+ * Implements Requirement 4.4
+ * @param {String} customerId - Customer UUID
+ * @param {String} replacementId - Replacement request UUID
+ * @param {String} reason - Rejection reason
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyReplacementRejected = async (customerId, replacementId, reason) => {
+  return await createNotification(customerId, {
+    type: 'return_rejected',
+    title: 'Replacement Request Rejected',
+    message: `Your replacement request was rejected. Reason: ${reason}`,
+    entityType: 'replacement',
+    entityId: replacementId,
+    priority: 'high'
+  });
+};
+
+/**
+ * Notify customer about replacement shipment
+ * Implements Requirement 4.10
+ * @param {String} customerId - Customer UUID
+ * @param {String} replacementId - Replacement request UUID
+ * @param {String} trackingNumber - Tracking number
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyReplacementShipped = async (customerId, replacementId, trackingNumber) => {
+  return await createNotification(customerId, {
+    type: 'order_shipped',
+    title: 'Replacement Shipped',
+    message: `Your replacement has been shipped. Tracking: ${trackingNumber}`,
+    entityType: 'replacement',
+    entityId: replacementId,
+    priority: 'normal'
+  });
+};
+
+/**
+ * Notify seller about replacement request
+ * Implements Requirement 4.4
+ * @param {String} sellerId - Seller UUID
+ * @param {String} replacementId - Replacement request UUID
+ * @param {String} productTitle - Product title
+ * @returns {Promise<Object>} Created notification
+ */
+const notifySellerReplacementRequest = async (sellerId, replacementId, productTitle) => {
+  return await createNotification(sellerId, {
+    type: 'return_requested',
+    title: 'New Replacement Request',
+    message: `A customer has requested a replacement for: ${productTitle}`,
+    entityType: 'replacement',
+    entityId: replacementId,
+    priority: 'high'
+  });
+};
+
+/**
+ * Notify customer about refund request received
+ * Implements Requirement 5.13
+ * @param {String} customerId - Customer UUID
+ * @param {String} refundId - Refund request UUID
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyRefundRequestReceived = async (customerId, refundId) => {
+  return await createNotification(customerId, {
+    type: 'return_requested',
+    title: 'Refund Request Received',
+    message: 'Your refund request has been received and is being reviewed.',
+    entityType: 'refund',
+    entityId: refundId,
+    priority: 'normal'
+  });
+};
+
+/**
+ * Notify customer about refund approval
+ * Implements Requirement 5.13
+ * @param {String} customerId - Customer UUID
+ * @param {String} refundId - Refund request UUID
+ * @param {Number} amount - Refund amount
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyRefundApproved = async (customerId, refundId, amount) => {
+  return await createNotification(customerId, {
+    type: 'return_approved',
+    title: 'Refund Approved',
+    message: `Your refund of $${(amount / 100).toFixed(2)} has been approved and will be processed soon.`,
+    entityType: 'refund',
+    entityId: refundId,
+    priority: 'high'
+  });
+};
+
+/**
+ * Notify customer about refund completion
+ * Implements Requirement 5.21
+ * @param {String} customerId - Customer UUID
+ * @param {String} refundId - Refund request UUID
+ * @param {Number} amount - Refund amount
+ * @returns {Promise<Object>} Created notification
+ */
+const notifyRefundCompleted = async (customerId, refundId, amount) => {
+  return await createNotification(customerId, {
+    type: 'refund_processed',
+    title: 'Refund Completed',
+    message: `Your refund of $${(amount / 100).toFixed(2)} has been processed successfully.`,
+    entityType: 'refund',
+    entityId: refundId,
+    priority: 'high'
+  });
+};
+
+/**
+ * Notify seller about refund request
+ * Implements Requirement 5.13
+ * @param {String} sellerId - Seller UUID
+ * @param {String} refundId - Refund request UUID
+ * @param {Number} amount - Refund amount
+ * @returns {Promise<Object>} Created notification
+ */
+const notifySellerRefundRequest = async (sellerId, refundId, amount) => {
+  return await createNotification(sellerId, {
+    type: 'return_requested',
+    title: 'New Refund Request',
+    message: `A customer has requested a refund of $${(amount / 100).toFixed(2)}.`,
+    entityType: 'refund',
+    entityId: refundId,
+    priority: 'high'
+  });
+};
+
 module.exports = {
   createNotification,
   getUserNotifications,
@@ -199,5 +409,18 @@ module.exports = {
   deleteNotification,
   getUnreadCount,
   createBulkNotifications,
-  deleteOldNotifications
+  deleteOldNotifications,
+  // Critical features notifications
+  notifyDeliveryRatingSubmitted,
+  notifySellerLowDeliveryRating,
+  notifyReplacementRequestReceived,
+  notifyReplacementApproved,
+  notifyReplacementRejected,
+  notifyReplacementShipped,
+  notifySellerReplacementRequest,
+  notifyRefundRequestReceived,
+  notifyRefundApproved,
+  notifyRefundCompleted,
+  notifySellerRefundRequest
 };
+

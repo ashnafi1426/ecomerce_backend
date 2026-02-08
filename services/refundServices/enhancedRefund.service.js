@@ -1,5 +1,6 @@
 const supabase = require('../../config/supabase');
 const paymentService = require('../paymentServices/payment.service');
+const orderService = require('../orderServices/order.service');
 
 /**
  * Enhanced Refund Service
@@ -149,18 +150,8 @@ class EnhancedRefundService {
       // Process payment refund with commission data
       await this.processPaymentRefund(refund.order_id, amount, commissionAdjustment);
 
-      // Update order status to partially refunded
-      const { error: orderUpdateError } = await supabase
-        .from('orders')
-        .update({ 
-          status: 'partially_refunded'
-        })
-        .eq('id', refund.order_id);
-
-      if (orderUpdateError) {
-        console.error('Error updating order:', orderUpdateError);
-        throw orderUpdateError;
-      }
+      // Update order status using order service (handles partial/full refund logic)
+      await orderService.updateOrderRefundStatus(refund.order_id, amount);
 
       return updatedRefund;
     } catch (error) {
@@ -217,13 +208,8 @@ class EnhancedRefundService {
       // Process payment refund with commission data
       await this.processPaymentRefund(refund.order_id, refund.refund_amount, commissionAdjustment);
 
-      // Update order status to refunded
-      await supabase
-        .from('orders')
-        .update({ 
-          status: 'refunded'
-        })
-        .eq('id', refund.order_id);
+      // Update order status using order service (handles partial/full refund logic)
+      await orderService.updateOrderRefundStatus(refund.order_id, refund.refund_amount);
 
       return updatedRefund;
     } catch (error) {

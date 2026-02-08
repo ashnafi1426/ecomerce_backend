@@ -704,10 +704,7 @@ const getOrderWithReplacements = async (orderId) => {
 async function getOrderRefundHistory(orderId) {
   const { data, error } = await supabase
     .from('refund_details')
-    .select(`
-      *,
-      processed_by_user:users!refund_details_processed_by_fkey(id, full_name, email)
-    `)
+    .select('*')
     .eq('order_id', orderId)
     .order('created_at', { ascending: false });
   
@@ -767,7 +764,7 @@ async function updateOrderRefundStatus(orderId, refundAmount) {
   
   // Determine new status
   let newStatus = order.status;
-  const orderTotal = parseFloat(order.total_amount || 0);
+  const orderTotal = parseFloat(order.amount || 0);
   
   if (totalRefunded >= orderTotal) {
     // Full refund
@@ -846,7 +843,7 @@ async function isEligibleForRefund(orderId) {
   
   // Get refund summary to check cumulative refunds
   const refundSummary = await getOrderRefundSummary(orderId);
-  const orderTotal = parseFloat(order.total_amount || 0);
+  const orderTotal = parseFloat(order.amount || 0);
   
   if (refundSummary.total_refunded >= orderTotal) {
     return {

@@ -29,6 +29,15 @@ router.post('/api/orders/:id/cancel', authenticate, requireCustomer, orderContro
 // Get invoice
 router.get('/api/orders/:id/invoice', authenticate, orderController.getInvoice);
 
+// Get order refund history
+router.get('/api/orders/:id/refunds', authenticate, orderController.getOrderRefunds);
+
+// Get order with refund details
+router.get('/api/orders/:id/with-refunds', authenticate, orderController.getOrderWithRefunds);
+
+// Check refund eligibility
+router.get('/api/orders/:id/refund-eligibility', authenticate, orderController.checkRefundEligibility);
+
 // ============================================
 // ADMIN ROUTES
 // ============================================
