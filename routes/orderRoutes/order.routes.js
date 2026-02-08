@@ -1,18 +1,48 @@
 /**
  * ORDER ROUTES
  * 
- * Routes for order creation and management (customer-facing).
+ * Routes for order creation and management.
  */
 
 const express = require('express');
 const router = express.Router();
 const orderController = require('../../controllers/orderControllers/order.controller');
 const authenticate = require('../../middlewares/auth.middleware');
+const { requireCustomer, requireAdmin } = require('../../middlewares/role.middleware');
 
-// All order routes require authentication
-router.post('/api/orders', authenticate, orderController.createOrder);
-router.get('/api/orders/my', authenticate, orderController.getMyOrders);
+// ============================================
+// CUSTOMER ROUTES
+// ============================================
+
+// Create order from cart
+router.post('/api/orders', authenticate, requireCustomer, orderController.createOrder);
+
+// Get customer's orders
+router.get('/api/orders', authenticate, requireCustomer, orderController.getMyOrders);
+
+// Get order by ID
 router.get('/api/orders/:id', authenticate, orderController.getOrderById);
-router.post('/api/orders/:id/confirm', authenticate, orderController.confirmPayment);
+
+// Cancel order
+router.post('/api/orders/:id/cancel', authenticate, requireCustomer, orderController.cancelOrder);
+
+// Get invoice
+router.get('/api/orders/:id/invoice', authenticate, orderController.getInvoice);
+
+// ============================================
+// ADMIN ROUTES
+// ============================================
+
+// Get all orders
+router.get('/api/admin/orders', authenticate, requireAdmin, orderController.getAllOrders);
+
+// Get order statistics
+router.get('/api/admin/orders/statistics', authenticate, requireAdmin, orderController.getStatistics);
+
+// Get recent orders
+router.get('/api/admin/orders/recent', authenticate, requireAdmin, orderController.getRecentOrders);
+
+// Update order status
+router.patch('/api/admin/orders/:id/status', authenticate, requireAdmin, orderController.updateOrderStatus);
 
 module.exports = router;

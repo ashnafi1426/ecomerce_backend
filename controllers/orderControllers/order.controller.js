@@ -1,113 +1,85 @@
 /**
  * ORDER CONTROLLER
  * 
- * Handles order creation and retrieval for customers.
+ * Handles HTTP requests for order operations.
  */
 
 const orderService = require('../../services/orderServices/order.service');
-const paymentService = require('../../services/paymentServices/payment.service');
-const { createPaymentIntent } = require('../../config/stripe');
 
 /**
- * Create new order and payment intent
+ * Create order from cart
  * POST /api/orders
  */
 const createOrder = async (req, res, next) => {
   try {
-    const { basket, shippingAddress } = req.body;
+    const { paymentIntentId, shippingAddress } = req.body;
 
-    // Validation
-    if (!basket || !Array.isArray(basket) || basket.length === 0) {
-      return res.status(400).json({ 
+    if (!shippingAddress) {
+      return res.status(400).json({
         error: 'Validation Error',
-        message: 'Basket is required and must contain items' 
+        message: 'Shipping address is required'
       });
     }
 
-    // Calculate total amount (in cents)
-    const amount = basket.reduce((total, item) => {
-      return total + (item.price * item.quantity * 100);
-    }, 0);
-
-    if (amount <= 0) {
-      return res.status(400).json({ 
-        error: 'Validation Error',
-        message: 'Order amount must be greater than 0' 
-      });
-    }
-
-    // Create Stripe payment intent
-    const paymentIntent = await createPaymentIntent(amount);
-
-    // Create order in database
-    const order = await orderService.create({
-      userId: req.user.id,
-      paymentIntentId: paymentIntent.id,
-      amount: Math.round(amount),
-      basket,
-      shippingAddress: shippingAddress || null,
-      status: 'pending_payment'
+    const order = await orderService.createFromCart(req.user.id, {
+      paymentIntentId,
+      shippingAddress
     });
 
     res.status(201).json({
       message: 'Order created successfully',
-      order: {
-        id: order.id,
-        amount: order.amount,
-        status: order.status,
-        createdAt: order.created_at
-      },
-      clientSecret: paymentIntent.client_secret
+      order
     });
   } catch (error) {
+    if (error.message.includes('Cart') || error.message.includes('validation')) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: error.message
+      });
+    }
     next(error);
   }
 };
 
 /**
- * Get user's orders
- * GET /api/orders/my
+ * Get customer's orders
+ * GET /api/orders
  */
 const getMyOrders = async (req, res, next) => {
   try {
     const { status, limit } = req.query;
-
+    
     const orders = await orderService.findByUserId(req.user.id, {
       status,
       limit: limit ? parseInt(limit) : undefined
     });
 
-    res.json({
-      count: orders.length,
-      orders
-    });
+    res.json(orders);
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Get order by ID (user can only access their own orders)
+ * Get order by ID
  * GET /api/orders/:id
  */
 const getOrderById = async (req, res, next) => {
   try {
-    const { id } = req.params;
-
-    const order = await orderService.findById(id);
+    const order = await orderService.findById(req.params.id);
 
     if (!order) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Not Found',
-        message: 'Order not found' 
+        message: 'Order not found'
       });
     }
 
-    // Check if order belongs to user (unless admin)
-    if (req.user.role !== 'admin' && order.user_id !== req.user.id) {
-      return res.status(403).json({ 
+    // Check if user owns this order (customers can only see their own orders)
+    if (req.user.role === 'customer' && order.user_id !== req.user.id) {
+      return res.status(403).json({
         error: 'Forbidden',
-        message: 'Access denied' 
+        message: 'You do not have permission to view this order'
       });
     }
 
@@ -118,47 +90,168 @@ const getOrderById = async (req, res, next) => {
 };
 
 /**
- * Confirm payment (webhook handler)
- * POST /api/orders/:id/confirm
+ * Cancel order
+ * POST /api/orders/:id/cancel
  */
-const confirmPayment = async (req, res, next) => {
+const cancelOrder = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { paymentIntentId } = req.body;
-
-    const order = await orderService.findById(id);
-
-    if (!order) {
-      return res.status(404).json({ 
-        error: 'Not Found',
-        message: 'Order not found' 
-      });
-    }
-
-    // Verify payment intent matches
-    if (order.payment_intent_id !== paymentIntentId) {
-      return res.status(400).json({ 
-        error: 'Validation Error',
-        message: 'Payment intent mismatch' 
-      });
-    }
-
-    // Update order status
-    await orderService.updateStatus(id, 'paid');
-
-    // Create payment record
-    await paymentService.create({
-      orderId: id,
-      paymentIntentId,
-      amount: order.amount,
-      paymentMethod: 'card',
-      status: 'succeeded'
-    });
+    const order = await orderService.cancelOrder(req.params.id, req.user.id);
 
     res.json({
-      message: 'Payment confirmed successfully',
-      orderId: id
+      message: 'Order cancelled successfully',
+      order
     });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: error.message
+      });
+    }
+    if (error.message.includes('Unauthorized') || error.message.includes('Cannot cancel')) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: error.message
+      });
+    }
+    next(error);
+  }
+};
+
+/**
+ * Get invoice for order
+ * GET /api/orders/:id/invoice
+ */
+const getInvoice = async (req, res, next) => {
+  try {
+    const order = await orderService.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Order not found'
+      });
+    }
+
+    // Check if user owns this order
+    if (req.user.role === 'customer' && order.user_id !== req.user.id) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to view this invoice'
+      });
+    }
+
+    const invoice = await orderService.generateInvoice(req.params.id);
+
+    res.json(invoice);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get all orders (Admin only)
+ * GET /api/admin/orders
+ */
+const getAllOrders = async (req, res, next) => {
+  try {
+    const { status, userId, limit, offset } = req.query;
+
+    const orders = await orderService.findAll({
+      status,
+      userId,
+      limit: limit ? parseInt(limit) : undefined,
+      offset: offset ? parseInt(offset) : undefined
+    });
+
+    res.json(orders);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update order status (Admin only)
+ * PATCH /api/admin/orders/:id/status
+ */
+const updateOrderStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Status is required'
+      });
+    }
+
+    const validStatuses = [
+      'pending_payment',
+      'paid',
+      'confirmed',
+      'packed',
+      'shipped',
+      'delivered',
+      'cancelled',
+      'refunded'
+    ];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+
+    const order = await orderService.updateStatus(
+      req.params.id,
+      status,
+      req.user.id
+    );
+
+    res.json({
+      message: 'Order status updated successfully',
+      order
+    });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: error.message
+      });
+    }
+    if (error.message.includes('Cannot transition')) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: error.message
+      });
+    }
+    next(error);
+  }
+};
+
+/**
+ * Get order statistics (Admin only)
+ * GET /api/admin/orders/statistics
+ */
+const getStatistics = async (req, res, next) => {
+  try {
+    const stats = await orderService.getStatistics();
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get recent orders (Admin only)
+ * GET /api/admin/orders/recent
+ */
+const getRecentOrders = async (req, res, next) => {
+  try {
+    const { limit } = req.query;
+    const orders = await orderService.getRecent(limit ? parseInt(limit) : 10);
+    res.json(orders);
   } catch (error) {
     next(error);
   }
@@ -168,6 +261,10 @@ module.exports = {
   createOrder,
   getMyOrders,
   getOrderById,
-  confirmPayment
+  cancelOrder,
+  getInvoice,
+  getAllOrders,
+  updateOrderStatus,
+  getStatistics,
+  getRecentOrders
 };
-

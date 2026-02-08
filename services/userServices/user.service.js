@@ -92,12 +92,9 @@ const updateLastLogin = async (id) => {
  * @returns {Promise<Object>} Updated user object
  */
 const update = async (id, updates) => {
-  const { data, error } = await supabase
+  const { data, error} = await supabase
     .from('users')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString()
-    })
+    .update(updates)
     .eq('id', id)
     .select('id, email, role, display_name, phone, created_at, status')
     .single();
@@ -157,7 +154,7 @@ const findAll = async (filters = {}) => {
  * @returns {Promise<void>}
  */
 const deleteUser = async (id) => {
-  await updateStatus(id, 'inactive');
+  await updateStatus(id, 'deleted');
 };
 
 /**
@@ -213,6 +210,174 @@ const search = async (searchTerm, limit = 20) => {
   return data || [];
 };
 
+/**
+ * Create seller account
+ * @param {Object} sellerData - Seller registration data
+ * @returns {Promise<Object>} Created seller object
+ */
+const createSeller = async ({ email, passwordHash, displayName, businessName, businessInfo, phone }) => {
+  const insertData = {
+    email,
+    password_hash: passwordHash,
+    role: 'seller',
+    display_name: displayName,
+    business_name: businessName,
+    phone,
+    verification_status: 'pending', // Requires admin approval
+    status: 'active'
+  };
+
+  // Handle businessInfo object - map to individual columns
+  if (businessInfo) {
+    if (businessInfo.description) insertData.business_description = businessInfo.description;
+    if (businessInfo.email) insertData.business_email = businessInfo.email;
+    if (businessInfo.phone) insertData.business_phone = businessInfo.phone;
+    if (businessInfo.address) insertData.business_address = businessInfo.address;
+    if (businessInfo.taxId) insertData.tax_id = businessInfo.taxId;
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .insert([insertData])
+    .select('id, email, role, display_name, business_name, verification_status, created_at, status')
+    .single();
+  
+  if (error) throw error;
+  
+  return data;
+};
+
+/**
+ * Create manager account (Admin only)
+ * @param {Object} managerData - Manager data
+ * @returns {Promise<Object>} Created manager object
+ */
+const createManager = async ({ email, passwordHash, displayName, phone = null }) => {
+  const { data, error } = await supabase
+    .from('users')
+    .insert([{
+      email,
+      password_hash: passwordHash,
+      role: 'manager',
+      display_name: displayName,
+      phone,
+      status: 'active'
+    }])
+    .select('id, email, role, display_name, phone, created_at, status')
+    .single();
+  
+  if (error) throw error;
+  
+  return data;
+};
+
+/**
+ * Update seller verification status
+ * @param {String} sellerId - Seller UUID
+ * @param {String} status - Verification status ('pending', 'verified', 'rejected')
+ * @returns {Promise<Object>} Updated seller object
+ */
+const updateSellerStatus = async (sellerId, status) => {
+  const { data, error } = await supabase
+    .from('users')
+    .update({ verification_status: status })
+    .eq('id', sellerId)
+    .eq('role', 'seller')
+    .select('id, email, display_name, business_name, verification_status')
+    .single();
+  
+  if (error) throw error;
+  
+  return data;
+};
+
+/**
+ * Get all sellers
+ * @param {Object} filters - Filter options
+ * @returns {Promise<Array>} Array of seller objects
+ */
+const findAllSellers = async (filters = {}) => {
+  let query = supabase
+    .from('users')
+    .select('id, email, display_name, business_name, business_description, business_email, business_phone, business_address, tax_id, phone, verification_status, seller_tier, created_at, status')
+    .eq('role', 'seller')
+    .order('created_at', { ascending: false });
+
+  if (filters.verificationStatus) {
+    query = query.eq('verification_status', filters.verificationStatus);
+  }
+
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+
+  if (filters.limit) {
+    query = query.limit(filters.limit);
+  }
+
+  if (filters.offset) {
+    query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
+  }
+
+  const { data, error } = await query;
+  
+  if (error) throw error;
+  
+  return data || [];
+};
+
+/**
+ * Get all managers
+ * @param {Object} filters - Filter options
+ * @returns {Promise<Array>} Array of manager objects
+ */
+const findAllManagers = async (filters = {}) => {
+  let query = supabase
+    .from('users')
+    .select('id, email, display_name, phone, created_at, last_login_at, status')
+    .eq('role', 'manager')
+    .order('created_at', { ascending: false });
+
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+
+  if (filters.limit) {
+    query = query.limit(filters.limit);
+  }
+
+  if (filters.offset) {
+    query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
+  }
+
+  const { data, error } = await query;
+  
+  if (error) throw error;
+  
+  return data || [];
+};
+
+/**
+ * Get seller by ID with full details
+ * @param {String} sellerId - Seller UUID
+ * @returns {Promise<Object|null>} Seller object or null
+ */
+const findSellerById = async (sellerId) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email, display_name, business_name, business_description, business_email, business_phone, business_address, tax_id, phone, verification_status, seller_tier, average_rating, total_reviews, total_sales, total_orders, created_at, last_login_at, status')
+    .eq('id', sellerId)
+    .eq('role', 'seller')
+    .single();
+  
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  
+  return data;
+};
+
 module.exports = {
   findById,
   findByEmail,
@@ -223,5 +388,12 @@ module.exports = {
   findAll,
   deleteUser,
   getStatistics,
-  search
+  search,
+  // Phase 2: Seller & Manager functions
+  createSeller,
+  createManager,
+  updateSellerStatus,
+  findAllSellers,
+  findAllManagers,
+  findSellerById
 };

@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Software Requirements Specification - FastShop Multi-Vendor E-Commerce Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 40px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #2c3e50;
+            padding-bottom: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            color: #7f8c8d;
+            font-size: 1.2em;
+            font-style: italic;
+        }
+        
+        .document-info {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        
+        .document-info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .document-info td {
+            padding: 8px;
+            border-bottom: 1px solid #bdc3c7;
+        }
+        
+        .document-info td:first-child {
+            font-weight: bold;
+            width: 200px;
+        }
+        
+        .toc {
+            background-color: #f8f9fa;
+            padding: 25px;
+            border-left: 4px solid #3498db;
+            margin-bottom: 40px;
+        }
+        
+        .toc h2 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        .toc ul {
+            list-style: none;
+        }
+        
+        .toc li {
+            padding: 5px 0;
+        }
+        
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .toc a:hover {
+            color: #2980b9;
+            text-decoration: underline;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            page-break-inside: avoid;
+        }
+        
+        h2 {
+            color: #2c3e50;
+            font-size: 2em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            margin-top: 30px;
+        }
+        
+        h3 {
+            color: #34495e;
+            font-size: 1.5em;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        h4 {
+            color: #555;
+            font-size: 1.2em;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+        
+        .glossary-term {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 3px solid #3498db;
+        }
+        
+        .glossary-term strong {
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        
+        .requirement {
+            background-color: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .requirement-header {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 15px;
+            margin: -20px -20px 15px -20px;
+            border-radius: 5px 5px 0 0;
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+        
+        .user-story {
+            background-color: #e8f4f8;
+            padding: 12px;
+            border-left: 4px solid #3498db;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+        
+        .acceptance-criteria {
+            margin-top: 15px;
+        }
+        
+        .acceptance-criteria h4 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .acceptance-criteria ol {
+            margin-left: 20px;
+        }
+        
+        .acceptance-criteria li {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 3px;
+        }
+        
+        .ears-keyword {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        
+        .system-keyword {
+            font-weight: bold;
+            color: #2980b9;
+        }
+        
+        .role-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        .role-admin {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .role-manager {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .role-seller {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .role-customer {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .role-system {
+            background-color: #95a5a6;
+            color: white;
+        }
+        
+        @media print {
+            body {
+                background-color: white;
+                padding: 0;
+            }
+            
+            .container {
+                box-shadow: none;
+                padding: 20px;
+            }
+            
+            .section {
+                page-break-inside: avoid;
+            }
+            
+            h2 {
+                page-break-after: avoid;
+            }
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Software Requirements Specification</h1>
+            <div class="subtitle">FastShop Multi-Vendor E-Commerce Platform</div>
+        </div>
+        
+        <div class="document-info">
+            <table>
+                <tr>
+                    <td>Document Version:</td>
+                    <td>1.0</td>
+                </tr>
+                <tr>
+                    <td>Date:</td>
+                    <td id="current-date"></td>
+                </tr>
+                <tr>
+                    <td>Project Name:</td>
+                    <td>FastShop Multi-Vendor E-Commerce Platform</td>
+                </tr>
+                <tr>
+                    <td>Feature Name:</td>
+                    <td>fastshop-ecommerce-platform</td>
+                </tr>
+                <tr>
+                    <td>Specification Method:</td>
+                    <td>EARS (Easy Approach to Requirements Syntax) with INCOSE Quality Rules</td>
+                </tr>
+                <tr>
+                    <td>Status:</td>
+                    <td>Draft for Review</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="toc">
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#introduction">1. Introduction</a></li>
+                <li><a href="#system-overview">2. System Overview</a></li>
+                <li><a href="#glossary">3. Glossary</a></li>
+                <li><a href="#requirements">4. Functional Requirements</a>
+                    <ul style="margin-left: 20px;">
+                        <li><a href="#req1">4.1 User Authentication and Authorization</a></li>
+                        <li><a href="#req2">4.2 User Registration and Profile Management</a></li>
+                        <li><a href="#req3">4.3 Product Management by Sellers</a></li>
+                        <li><a href="#req4">4.4 Product Approval Workflow</a></li>
+                        <li><a href="#req5">4.5 Product Browsing and Search</a></li>
+                        <li><a href="#req6">4.6 Shopping Cart Management</a></li>
+                        <li><a href="#req7">4.7 Checkout and Payment Processing</a></li>
+                        <li><a href="#req8">4.8 Order Management and Fulfillment</a></li>
+                        <li><a href="#req9">4.9 Order Tracking</a></li>
+                        <li><a href="#req10">4.10 Commission and Tax Calculation</a></li>
+                        <li><a href="#req11">4.11 Review and Rating System</a></li>
+                        <li><a href="#req12">4.12 Return and Refund Management</a></li>
+                        <li><a href="#req13">4.13 Dispute Resolution</a></li>
+                        <li><a href="#req14">4.14 Inventory Management</a></li>
+                        <li><a href="#req15">4.15 Reporting and Analytics</a></li>
+                        <li><a href="#req16">4.16 Notification System</a></li>
+                        <li><a href="#req17">4.17 Admin System Configuration</a></li>
+                        <li><a href="#req18">4.18 Manager Operations Oversight</a></li>
+                        <li><a href="#req19">4.19 Security and Data Protection</a></li>
+                        <li><a href="#req20">4.20 Multi-Vendor Order Handling</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="section" id="introduction">
+            <h2>1. Introduction</h2>
+            
+            <h3>1.1 Purpose</h3>
+            <p>
+                This Software Requirements Specification (SRS) document provides a comprehensive description of the functional 
+                requirements for the FastShop Multi-Vendor E-Commerce Platform. It is intended for developers, testers, 
+                project managers, and stakeholders involved in the design, development, and deployment of the system.
+            </p>
+            
+            <h3>1.2 Scope</h3>
+            <p>
+                FastShop is a comprehensive multi-vendor e-commerce platform that enables multiple sellers to sell products 
+                to customers through a centralized marketplace. The system implements role-based access control (RBAC) with 
+                four distinct user roles: Admin, Manager, Seller, and Customer. The platform manages the complete product 
+                lifecycle from seller registration through product approval, customer purchase, payment processing, order 
+                fulfillment, and post-sale activities including reviews and dispute resolution.
+            </p>
+            
+            <h3>1.3 Definitions, Acronyms, and Abbreviations</h3>
+            <ul style="margin-left: 20px;">
+                <li><strong>EARS:</strong> Easy Approach to Requirements Syntax</li>
+                <li><strong>INCOSE:</strong> International Council on Systems Engineering</li>
+                <li><strong>RBAC:</strong> Role-Based Access Control</li>
+                <li><strong>2FA:</strong> Two-Factor Authentication</li>
+                <li><strong>SRS:</strong> Software Requirements Specification</li>
+                <li><strong>API:</strong> Application Programming Interface</li>
+                <li><strong>HTTPS:</strong> Hypertext Transfer Protocol Secure</li>
+                <li><strong>TLS:</strong> Transport Layer Security</li>
+                <li><strong>CSV:</strong> Comma-Separated Values</li>
+                <li><strong>SMS:</strong> Short Message Service</li>
+            </ul>
+        </div>
+        
+        <div class="section" id="system-overview">
+            <h2>2. System Overview</h2>
+            
+            <h3>2.1 System Context</h3>
+            <p>
+                FastShop operates as a centralized marketplace connecting multiple sellers with customers. The platform 
+                provides administrative oversight and operational management capabilities to ensure quality and trust.
+            </p>
+            
+            <h3>2.2 User Roles</h3>
+            <div style="margin: 20px 0;">
+                <div style="margin-bottom: 15px;">
+                    <span class="role-badge role-admin">ADMIN</span>
+                    <p style="margin-left: 20px;">System owner with full control over users, sellers, system configuration, 
+                    payment gateways, tax rules, commission rates, categories, brands, promotions, global reports, and 
+                    dispute resolution.</p>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <span class="role-badge role-manager">MANAGER</span>
+                    <p style="margin-left: 20px;">Operations supervisor who oversees sellers and products, approves/rejects 
+                    product listings, monitors orders/deliveries/returns, handles refunds and escalations, views operational 
+                    analytics, and assigns logistics.</p>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <span class="role-badge role-seller">SELLER</span>
+                    <p style="margin-left: 20px;">Vendor/merchant who registers and verifies account, creates/updates/manages 
+                    own products, sets pricing and inventory, uploads product images/descriptions, manages and fulfills own 
+                    orders, ships products, and views own sales reports.</p>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    <p style="margin-left: 20px;">Buyer who registers/logs in, browses/searches/filters products, adds to cart, 
+                    completes checkout and payment, tracks orders, leaves reviews/ratings, requests returns/refunds, and manages 
+                    profile and delivery addresses.</p>
+                </div>
+            </div>
+            
+            <h3>2.3 System Interaction Flow</h3>
+            <ol style="margin-left: 20px;">
+                <li>Seller adds product with price and stock</li>
+                <li>Manager reviews and approves the product</li>
+                <li>Customer browses and places order</li>
+                <li>Customer completes payment</li>
+                <li>Seller ships the product</li>
+                <li>Manager monitors delivery and resolves issues</li>
+                <li>Admin views revenue, commission, and reports</li>
+            </ol>
+        </div>
+        
+        <div class="section" id="glossary">
+            <h2>3. Glossary</h2>
+            <p>The following terms are used throughout this document with specific meanings:</p>
+            
+            <div class="glossary-term">
+                <strong>System:</strong> The FastShop multi-vendor e-commerce platform
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Admin:</strong> System owner with full control over platform configuration and oversight
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Manager:</strong> Operations supervisor who oversees sellers, products, and order operations
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Seller:</strong> Vendor or merchant who lists and sells products on the platform
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Customer:</strong> Buyer who purchases products from sellers through the platform
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Product:</strong> An item listed for sale by a seller, requiring manager approval
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Order:</strong> A customer's purchase transaction containing one or more products
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Cart:</strong> A temporary collection of products selected by a customer before checkout
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Commission:</strong> Platform fee calculated as a percentage of seller's sale amount
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Dispute:</strong> A formal complaint or issue raised regarding an order or transaction
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Inventory:</strong> The quantity of a product available for sale
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Payment_Gateway:</strong> External service that processes payment transactions
+            </div>
+            
+            <div class="glossary-term">
+                <strong>RBAC:</strong> Role-Based Access Control system that restricts system access based on user roles
+            </div>
+            
+            <div class="glossary-term">
+                <strong>2FA:</strong> Two-Factor Authentication requiring two forms of verification
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Approval_Workflow:</strong> Process where seller-created products require manager approval before 
+                becoming visible to customers
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Refund:</strong> Return of payment to customer for returned or disputed orders
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Review:</strong> Customer feedback and rating for a purchased product
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Notification:</strong> System-generated message sent via email or SMS
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Tax_Rule:</strong> Configuration defining tax calculation based on location or product category
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Delivery_Address:</strong> Customer-specified location for order shipment
+            </div>
+            
+            <div class="glossary-term">
+                <strong>Logistics_Provider:</strong> Third-party service handling product delivery
+            </div>
+        </div>
+        <div class="section" id="requirements">
+            <h2>4. Functional Requirements</h2>
+            
+            <div class="requirement" id="req1">
+                <div class="requirement-header">
+                    <span class="role-badge role-system">SYSTEM</span>
+                    4.1 User Authentication and Authorization
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a system user, I want secure authentication and role-based access control, 
+                    so that only authorized users can access role-specific functionality.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a user attempts to log in with valid credentials, 
+                        <span class="system-keyword">THE System SHALL</span> authenticate the user and grant access to 
+                        role-specific features</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user attempts to log in with invalid credentials, 
+                        <span class="system-keyword">THE System SHALL</span> reject the login attempt and display an error message</li>
+                        
+                        <li><span class="ears-keyword">WHERE</span> 2FA is enabled for a user account, 
+                        <span class="system-keyword">THE System SHALL</span> require a second authentication factor before 
+                        granting access</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user session expires after 30 minutes of inactivity, 
+                        <span class="system-keyword">THE System SHALL</span> terminate the session and require re-authentication</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> enforce RBAC by restricting each user role to 
+                        only their authorized operations</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user attempts to access a resource without proper authorization, 
+                        <span class="system-keyword">THE System SHALL</span> deny access and return an authorization error</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req2">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    <span class="role-badge role-seller">SELLER</span>
+                    4.2 User Registration and Profile Management
+                </div>
+                <div class="user-story">
+                    <strong>User Story:</strong> As a new user, I want to register an account with my role, so that I can 
+                    access platform features appropriate to my role.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer registers with valid information, 
+                        <span class="system-keyword">THE System SHALL</span> create a Customer account and send a verification email</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Seller registers with valid business information, 
+                        <span class="system-keyword">THE System SHALL</span> create a Seller account in pending status and 
+                        notify Admin for verification</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user clicks the verification link in their email within 24 hours, 
+                        <span class="system-keyword">THE System SHALL</span> activate the account</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user updates their profile information, 
+                        <span class="system-keyword">THE System SHALL</span> validate and save the changes immediately</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> require email addresses to be unique across 
+                        all user accounts</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user requests password reset, 
+                        <span class="system-keyword">THE System SHALL</span> send a secure reset link valid for 1 hour</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req3">
+                <div class="requirement-header">
+                    <span class="role-badge role-seller">SELLER</span>
+                    4.3 Product Management by Sellers
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Seller, I want to create and manage my product listings, so that I can 
+                    sell my products on the platform.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Seller creates a product with valid details, 
+                        <span class="system-keyword">THE System SHALL</span> save the product in pending approval status</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> require each product to have a name, description, 
+                        price, category, and at least one image</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Seller uploads product images, 
+                        <span class="system-keyword">THE System SHALL</span> validate image format and size and store the images</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Seller updates an approved product, 
+                        <span class="system-keyword">THE System SHALL</span> move the product back to pending approval status</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Seller sets product inventory to zero, 
+                        <span class="system-keyword">THE System SHALL</span> mark the product as out of stock</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow Sellers to manage only their own products</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req4">
+                <div class="requirement-header">
+                    <span class="role-badge role-manager">MANAGER</span>
+                    4.4 Product Approval Workflow
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Manager, I want to review and approve seller product listings, so that 
+                    only quality products appear on the platform.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Manager approves a pending product, 
+                        <span class="system-keyword">THE System SHALL</span> change the product status to approved and make it 
+                        visible to Customers</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Manager rejects a pending product, 
+                        <span class="system-keyword">THE System SHALL</span> change the product status to rejected and notify 
+                        the Seller with rejection reason</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> display only approved products to Customers in 
+                        search and browse results</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a product is pending approval, 
+                        <span class="system-keyword">THE System SHALL</span> prevent Customers from viewing or purchasing the product</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> provide Managers with a queue of all pending 
+                        products ordered by submission date</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req5">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    4.5 Product Browsing and Search
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Customer, I want to browse and search for products, so that I can find 
+                    items I want to purchase.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer searches with keywords, 
+                        <span class="system-keyword">THE System SHALL</span> return all approved products matching the keywords 
+                        in name or description</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer applies category filters, 
+                        <span class="system-keyword">THE System SHALL</span> return only approved products in the selected categories</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer applies price range filters, 
+                        <span class="system-keyword">THE System SHALL</span> return only approved products within the specified 
+                        price range</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer sorts results by price, 
+                        <span class="system-keyword">THE System SHALL</span> order products from lowest to highest or highest 
+                        to lowest price</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> display product name, price, primary image, 
+                        seller name, and average rating in search results</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer views a product detail page, 
+                        <span class="system-keyword">THE System SHALL</span> display full description, all images, specifications, 
+                        reviews, and current inventory status</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req6">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    4.6 Shopping Cart Management
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Customer, I want to add products to my cart and manage quantities, so that 
+                    I can purchase multiple items in a single transaction.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer adds an in-stock product to cart, 
+                        <span class="system-keyword">THE System SHALL</span> add the product with specified quantity to the 
+                        Customer's cart</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer adds a product quantity exceeding available inventory, 
+                        <span class="system-keyword">THE System SHALL</span> reject the addition and display an inventory error</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer updates cart item quantity, 
+                        <span class="system-keyword">THE System SHALL</span> validate against current inventory and update the cart</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer removes an item from cart, 
+                        <span class="system-keyword">THE System SHALL</span> delete the item from the cart immediately</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer's cart contains items and the Customer logs out, 
+                        <span class="system-keyword">THE System SHALL</span> persist the cart and restore it upon next login</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> calculate and display cart subtotal by summing 
+                        all item prices multiplied by quantities</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req7">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    4.7 Checkout and Payment Processing
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Customer, I want to complete checkout and pay for my order, so that I can 
+                    purchase the products in my cart.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer initiates checkout with a non-empty cart, 
+                        <span class="system-keyword">THE System SHALL</span> validate inventory availability for all cart items</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> inventory is insufficient for any cart item during checkout, 
+                        <span class="system-keyword">THE System SHALL</span> notify the Customer and prevent order creation</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer selects a delivery address and payment method, 
+                        <span class="system-keyword">THE System SHALL</span> calculate total amount including product prices, 
+                        taxes, and shipping fees</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer submits payment through Payment_Gateway, 
+                        <span class="system-keyword">THE System SHALL</span> process the payment and create an order upon 
+                        successful payment</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> payment processing fails, 
+                        <span class="system-keyword">THE System SHALL</span> notify the Customer with failure reason and retain 
+                        the cart contents</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an order is created successfully, 
+                        <span class="system-keyword">THE System SHALL</span> reduce inventory for all ordered products and send 
+                        order confirmation to Customer</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> generate a unique order number for each 
+                        successfully created order</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req8">
+                <div class="requirement-header">
+                    <span class="role-badge role-seller">SELLER</span>
+                    4.8 Order Management and Fulfillment
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Seller, I want to manage and fulfill orders for my products, so that I can 
+                    complete sales and ship products to customers.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> an order contains a Seller's products, 
+                        <span class="system-keyword">THE System SHALL</span> notify the Seller and display the order in the 
+                        Seller's order queue</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Seller marks an order as shipped with tracking information, 
+                        <span class="system-keyword">THE System SHALL</span> update order status to shipped and notify the Customer</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer views order details, 
+                        <span class="system-keyword">THE System SHALL</span> display order status, items, quantities, prices, 
+                        delivery address, and tracking information if available</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow Sellers to view and manage only orders 
+                        containing their own products</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an order status changes, 
+                        <span class="system-keyword">THE System SHALL</span> send a Notification to the Customer via email</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req9">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    4.9 Order Tracking
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Customer, I want to track my order status and delivery, so that I know 
+                    when to expect my products.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer views their order history, 
+                        <span class="system-keyword">THE System SHALL</span> display all orders with order number, date, total 
+                        amount, and current status</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer views a specific order, 
+                        <span class="system-keyword">THE System SHALL</span> display detailed order information including all items, 
+                        delivery address, payment method, and tracking information</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an order is shipped, 
+                        <span class="system-keyword">THE System SHALL</span> display tracking number and estimated delivery date 
+                        to the Customer</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> update order status through the following 
+                        progression: pending, confirmed, shipped, delivered, or cancelled</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req10">
+                <div class="requirement-header">
+                    <span class="role-badge role-admin">ADMIN</span>
+                    4.10 Commission and Tax Calculation
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As an Admin, I want the system to automatically calculate commissions and taxes, 
+                    so that platform revenue and tax obligations are accurately tracked.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> an order is completed, 
+                        <span class="system-keyword">THE System SHALL</span> calculate commission as a percentage of the order 
+                        subtotal based on the configured commission rate</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an order is completed, 
+                        <span class="system-keyword">THE System SHALL</span> calculate applicable taxes based on Tax_Rule 
+                        configurations for the delivery location</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> deduct commission from Seller payout amount</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> store commission amount and tax amount separately 
+                        for each order</li>
+                        
+                        <li><span class="ears-keyword">WHERE</span> different product categories have different commission rates, 
+                        <span class="system-keyword">THE System SHALL</span> apply the category-specific commission rate to each product</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req11">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    4.11 Review and Rating System
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Customer, I want to leave reviews and ratings for purchased products, so that 
+                    I can share my experience with other customers.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer's order is delivered, 
+                        <span class="system-keyword">THE System SHALL</span> allow the Customer to submit a Review for each 
+                        product in the order</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> require each Review to include a rating from 
+                        1 to 5 stars</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer submits a Review, 
+                        <span class="system-keyword">THE System SHALL</span> save the Review and recalculate the product's 
+                        average rating</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> prevent Customers from submitting multiple 
+                        Reviews for the same product in a single order</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a product detail page is viewed, 
+                        <span class="system-keyword">THE System SHALL</span> display all Reviews with rating, review text, 
+                        customer name, and review date</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> calculate average rating as the mean of all 
+                        Review ratings for a product</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req12">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    <span class="role-badge role-manager">MANAGER</span>
+                    4.12 Return and Refund Management
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Customer, I want to request returns and refunds for products, so that I can 
+                    get my money back for unsatisfactory purchases.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer requests a return within 30 days of delivery, 
+                        <span class="system-keyword">THE System SHALL</span> create a return request and notify the Manager</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Manager approves a return request, 
+                        <span class="system-keyword">THE System SHALL</span> update the return status to approved and notify 
+                        the Customer with return instructions</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Manager rejects a return request, 
+                        <span class="system-keyword">THE System SHALL</span> update the return status to rejected and notify 
+                        the Customer with rejection reason</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a return is approved and product is received, 
+                        <span class="system-keyword">THE System SHALL</span> initiate a Refund through Payment_Gateway</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Refund is processed successfully, 
+                        <span class="system-keyword">THE System SHALL</span> update order status to refunded and notify the Customer</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> restore product inventory when a return is 
+                        approved and product is received</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req13">
+                <div class="requirement-header">
+                    <span class="role-badge role-manager">MANAGER</span>
+                    4.13 Dispute Resolution
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Manager, I want to handle disputes between customers and sellers, so that 
+                    I can resolve conflicts and maintain platform trust.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer or Seller creates a Dispute for an order, 
+                        <span class="system-keyword">THE System SHALL</span> save the Dispute and notify the Manager</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Manager views a Dispute, 
+                        <span class="system-keyword">THE System SHALL</span> display all Dispute details including order information, 
+                        involved parties, and dispute reason</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Manager resolves a Dispute, 
+                        <span class="system-keyword">THE System SHALL</span> update Dispute status to resolved and notify both 
+                        Customer and Seller with resolution details</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow Managers to issue partial or full Refunds 
+                        as part of Dispute resolution</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> maintain a complete history of all actions taken 
+                        on each Dispute</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req14">
+                <div class="requirement-header">
+                    <span class="role-badge role-seller">SELLER</span>
+                    4.14 Inventory Management
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Seller, I want to manage product inventory and receive low stock alerts, 
+                    so that I can maintain adequate stock levels.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Seller updates product inventory quantity, 
+                        <span class="system-keyword">THE System SHALL</span> validate the quantity is non-negative and save 
+                        the new inventory level</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> inventory for a product falls below the configured threshold, 
+                        <span class="system-keyword">THE System SHALL</span> send a low stock alert Notification to the Seller</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> inventory reaches zero, 
+                        <span class="system-keyword">THE System SHALL</span> mark the product as out of stock and prevent new purchases</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an order is placed, 
+                        <span class="system-keyword">THE System SHALL</span> reduce inventory atomically to prevent overselling</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a return is processed, 
+                        <span class="system-keyword">THE System SHALL</span> increase inventory by the returned quantity</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req15">
+                <div class="requirement-header">
+                    <span class="role-badge role-admin">ADMIN</span>
+                    <span class="role-badge role-manager">MANAGER</span>
+                    <span class="role-badge role-seller">SELLER</span>
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    4.15 Reporting and Analytics
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a system user, I want to view role-specific reports and analytics, so that 
+                    I can make informed business decisions.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHERE</span> the user is an Admin, 
+                        <span class="system-keyword">THE System SHALL</span> provide reports showing total revenue, commission earned, 
+                        number of orders, and number of active sellers</li>
+                        
+                        <li><span class="ears-keyword">WHERE</span> the user is a Manager, 
+                        <span class="system-keyword">THE System SHALL</span> provide reports showing pending approvals, order 
+                        fulfillment rates, return rates, and dispute statistics</li>
+                        
+                        <li><span class="ears-keyword">WHERE</span> the user is a Seller, 
+                        <span class="system-keyword">THE System SHALL</span> provide reports showing own sales revenue, number 
+                        of orders, top-selling products, and commission paid</li>
+                        
+                        <li><span class="ears-keyword">WHERE</span> the user is a Customer, 
+                        <span class="system-keyword">THE System SHALL</span> provide order history and total spending summary</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user requests a report for a specific date range, 
+                        <span class="system-keyword">THE System SHALL</span> filter report data to include only transactions 
+                        within the specified range</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow report export in CSV format</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req16">
+                <div class="requirement-header">
+                    <span class="role-badge role-system">SYSTEM</span>
+                    4.16 Notification System
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a system user, I want to receive notifications about important events, so that 
+                    I stay informed about platform activities.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a notification-triggering event occurs, 
+                        <span class="system-keyword">THE System SHALL</span> send a Notification via email to the relevant user</li>
+                        
+                        <li><span class="ears-keyword">WHERE</span> a user has enabled SMS notifications, 
+                        <span class="system-keyword">THE System SHALL</span> send a Notification via SMS in addition to email</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> send Notifications for the following events: 
+                        order confirmation, order status changes, product approval/rejection, low inventory alerts, new reviews, 
+                        dispute creation, and dispute resolution</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Notification fails to send, 
+                        <span class="system-keyword">THE System SHALL</span> retry sending up to 3 times with exponential backoff</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> store all sent Notifications in a notification 
+                        history accessible to each user</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req17">
+                <div class="requirement-header">
+                    <span class="role-badge role-admin">ADMIN</span>
+                    4.17 Admin System Configuration
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As an Admin, I want to configure system-wide settings, so that I can control 
+                    platform behavior and business rules.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> an Admin updates commission rates, 
+                        <span class="system-keyword">THE System SHALL</span> apply the new rates to all orders created after 
+                        the update</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an Admin configures Tax_Rules, 
+                        <span class="system-keyword">THE System SHALL</span> validate the rules and apply them to subsequent 
+                        order calculations</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an Admin adds or modifies product categories, 
+                        <span class="system-keyword">THE System SHALL</span> make the categories available for Seller product creation</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an Admin configures Payment_Gateway settings, 
+                        <span class="system-keyword">THE System SHALL</span> validate the configuration and use it for payment 
+                        processing</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow Admin to enable or disable seller accounts</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow Admin to configure inventory low stock 
+                        threshold values</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req18">
+                <div class="requirement-header">
+                    <span class="role-badge role-manager">MANAGER</span>
+                    4.18 Manager Operations Oversight
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Manager, I want to oversee platform operations and intervene when necessary, 
+                    so that I can ensure smooth platform functioning.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Manager views the operations dashboard, 
+                        <span class="system-keyword">THE System SHALL</span> display pending product approvals, active disputes, 
+                        pending returns, and order fulfillment metrics</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow Managers to view all orders across all 
+                        sellers with filtering by status, date, and seller</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Manager assigns a Logistics_Provider to an order, 
+                        <span class="system-keyword">THE System SHALL</span> update the order with logistics information and 
+                        notify the Seller</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow Managers to manually adjust order status 
+                        when handling escalations</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Manager views seller performance metrics, 
+                        <span class="system-keyword">THE System SHALL</span> display order fulfillment rate, average shipping time, 
+                        return rate, and customer rating for each seller</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req19">
+                <div class="requirement-header">
+                    <span class="role-badge role-system">SYSTEM</span>
+                    4.19 Security and Data Protection
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a system user, I want my data to be secure and protected, so that my personal 
+                    and financial information remains confidential.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="system-keyword">THE System SHALL</span> encrypt all passwords using bcrypt with a minimum 
+                        cost factor of 12 before storing in the database</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> transmit all data over HTTPS with TLS 1.2 or higher</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> not store complete credit card numbers and SHALL 
+                        use Payment_Gateway tokenization for payment processing</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a user requests account deletion, 
+                        <span class="system-keyword">THE System SHALL</span> anonymize personal data while retaining transaction 
+                        records for legal compliance</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> log all authentication attempts including timestamp, 
+                        user identifier, and IP address</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> implement rate limiting to prevent brute force 
+                        attacks by limiting login attempts to 5 per 15-minute window per IP address</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="requirement" id="req20">
+                <div class="requirement-header">
+                    <span class="role-badge role-customer">CUSTOMER</span>
+                    <span class="role-badge role-seller">SELLER</span>
+                    4.20 Multi-Vendor Order Handling
+                </div>
+                
+                <div class="user-story">
+                    <strong>User Story:</strong> As a Customer, I want to purchase products from multiple sellers in a single 
+                    checkout, so that I can efficiently buy from different vendors.
+                </div>
+                
+                <div class="acceptance-criteria">
+                    <h4>Acceptance Criteria:</h4>
+                    <ol>
+                        <li><span class="ears-keyword">WHEN</span> a Customer's cart contains products from multiple Sellers, 
+                        <span class="system-keyword">THE System SHALL</span> allow checkout as a single transaction</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> an order contains products from multiple Sellers, 
+                        <span class="system-keyword">THE System SHALL</span> create separate sub-orders for each Seller</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a multi-vendor order is created, 
+                        <span class="system-keyword">THE System SHALL</span> notify each Seller only about their own sub-order</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> calculate commission separately for each 
+                        Seller's sub-order</li>
+                        
+                        <li><span class="ears-keyword">WHEN</span> a Customer views a multi-vendor order, 
+                        <span class="system-keyword">THE System SHALL</span> display all products grouped by Seller with 
+                        individual tracking information per Seller</li>
+                        
+                        <li><span class="system-keyword">THE System SHALL</span> allow independent fulfillment status for each 
+                        Seller's sub-order within a multi-vendor order</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>FastShop Multi-Vendor E-Commerce Platform</strong></p>
+            <p>Software Requirements Specification - Version 1.0</p>
+            <p>This document follows EARS (Easy Approach to Requirements Syntax) patterns and INCOSE quality rules</p>
+            <p>&copy; 2024 - All Rights Reserved</p>
+        </div>
+    </div>
+    
+    <script>
+        // Set current date
+        document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -4,13 +4,15 @@
  * Routes for user management operations.
  * Customers can manage their own profile.
  * Admins can manage all users.
+ * 
+ * Phase 2: Added manager and seller management routes
  */
 
 const express = require('express');
 const router = express.Router();
 const userController = require('../../controllers/userControllers/user.controller');
 const authenticate = require('../../middlewares/auth.middleware');
-const { requireAdmin } = require('../../middlewares/role.middleware');
+const { requireAdmin, requireAnyRole } = require('../../middlewares/role.middleware');
 
 // ============================================
 // CUSTOMER ROUTES (Own Profile)
@@ -64,5 +66,30 @@ router.post('/api/users/:id/unblock', authenticate, requireAdmin, userController
 
 // Assign role
 router.patch('/api/users/:id/role', authenticate, requireAdmin, userController.assignRole);
+
+// ============================================
+// PHASE 2: MANAGER & SELLER ROUTES
+// ============================================
+
+// Create manager (Admin only)
+router.post('/api/admin/users/manager', authenticate, requireAdmin, userController.createManager);
+
+// Get all managers (Admin only)
+router.get('/api/admin/managers', authenticate, requireAdmin, userController.getAllManagers);
+
+// Get all sellers (Admin/Manager)
+router.get('/api/admin/sellers', authenticate, requireAnyRole(['admin', 'manager']), userController.getAllSellers);
+
+// Get seller by ID (Admin/Manager)
+router.get('/api/admin/sellers/:id', authenticate, requireAnyRole(['admin', 'manager']), userController.getSellerById);
+
+// Update seller verification status (Admin only)
+router.put('/api/admin/sellers/:id/status', authenticate, requireAdmin, userController.updateSellerVerificationStatus);
+
+// Approve seller (Admin only)
+router.post('/api/admin/sellers/:id/approve', authenticate, requireAdmin, userController.approveSeller);
+
+// Reject seller (Admin only)
+router.post('/api/admin/sellers/:id/reject', authenticate, requireAdmin, userController.rejectSeller);
 
 module.exports = router;

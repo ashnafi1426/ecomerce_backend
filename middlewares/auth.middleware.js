@@ -50,13 +50,24 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // Attach user to request object
+    // Attach user to request object with role-specific fields
     req.user = {
       id: user.id,
       email: user.email,
       role: user.role,
       displayName: user.display_name
     };
+
+    // Add seller-specific fields
+    if (user.role === 'seller') {
+      req.user.businessName = user.business_name;
+      req.user.verificationStatus = user.verification_status;
+    }
+
+    // Add manager-specific fields (if any in future)
+    if (user.role === 'manager') {
+      req.user.managerLevel = user.manager_level || 'standard';
+    }
 
     next();
   } catch (error) {
@@ -78,4 +89,63 @@ const authenticate = async (req, res, next) => {
   }
 };
 
+/**
+ * Optional authentication middleware
+ * 
+ * Attempts to authenticate user if token is provided,
+ * but continues without error if no token is present.
+ * Useful for routes that have different behavior for authenticated vs. unauthenticated users.
+ */
+const optionalAuthenticate = async (req, res, next) => {
+  try {
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization;
+    
+    // If no token, continue without authentication
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+
+    // Extract token
+    const token = authHeader.substring(7); // Remove "Bearer " prefix
+
+    try {
+      // Verify token
+      const decoded = verifyToken(token);
+
+      // Get user from database
+      const user = await userService.findById(decoded.userId);
+
+      if (user && user.status === 'active') {
+        // Attach user to request object with role-specific fields
+        req.user = {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          displayName: user.display_name
+        };
+
+        // Add seller-specific fields
+        if (user.role === 'seller') {
+          req.user.businessName = user.business_name;
+          req.user.verificationStatus = user.verification_status;
+        }
+
+        // Add manager-specific fields
+        if (user.role === 'manager') {
+          req.user.managerLevel = user.manager_level || 'standard';
+        }
+      }
+    } catch (tokenError) {
+      // Invalid token - continue without authentication
+      // Don't throw error, just proceed as unauthenticated
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = authenticate;
+module.exports.optionalAuthenticate = optionalAuthenticate;

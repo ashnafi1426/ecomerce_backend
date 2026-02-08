@@ -218,9 +218,136 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+/**
+ * Register new seller
+ * POST /api/auth/register/seller
+ */
+const registerSeller = async (req, res, next) => {
+  try {
+    const { email, password, displayName, businessName, businessInfo, phone } = req.body;
+
+    // Validation
+    if (!email || !password || !businessName) {
+      return res.status(400).json({ 
+        error: 'Validation Error',
+        message: 'Email, password, and business name are required' 
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        error: 'Validation Error',
+        message: 'Invalid email format' 
+      });
+    }
+
+    // Validate password length
+    if (password.length < 8) {
+      return res.status(400).json({ 
+        error: 'Validation Error',
+        message: 'Password must be at least 8 characters' 
+      });
+    }
+
+    // Validate business name
+    if (businessName.length < 3) {
+      return res.status(400).json({ 
+        error: 'Validation Error',
+        message: 'Business name must be at least 3 characters' 
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await userService.findByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({ 
+        error: 'Conflict',
+        message: 'Email already registered' 
+      });
+    }
+
+    // Hash password
+    const passwordHash = await hashPassword(password);
+
+    // Create seller account
+    const seller = await userService.createSeller({
+      email,
+      passwordHash,
+      displayName: displayName || businessName,
+      businessName,
+      businessInfo: businessInfo || {},
+      phone: phone || null
+    });
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: seller.id,
+      role: seller.role
+    });
+
+    // Return seller and token
+    res.status(201).json({
+      message: 'Seller account created successfully. Pending admin approval.',
+      token,
+      seller: {
+        id: seller.id,
+        email: seller.email,
+        role: seller.role,
+        displayName: seller.display_name,
+        businessName: seller.business_name,
+        verificationStatus: seller.verification_status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get seller verification status
+ * GET /api/auth/seller/status
+ */
+const getSellerStatus = async (req, res, next) => {
+  try {
+    // User must be authenticated and be a seller
+    if (req.user.role !== 'seller') {
+      return res.status(403).json({ 
+        error: 'Forbidden',
+        message: 'Only sellers can check verification status' 
+      });
+    }
+
+    const seller = await userService.findSellerById(req.user.id);
+
+    if (!seller) {
+      return res.status(404).json({ 
+        error: 'Not Found',
+        message: 'Seller not found' 
+      });
+    }
+
+    res.json({
+      verificationStatus: seller.verification_status,
+      businessName: seller.business_name,
+      message: seller.verification_status === 'pending' 
+        ? 'Your seller account is pending admin approval'
+        : seller.verification_status === 'verified'
+        ? 'Your seller account is verified'
+        : 'Your seller account was rejected'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
   getProfile,
-  updateProfile
+  updateProfile,
+  // Phase 2: Seller registration
+  registerSeller,
+  getSellerStatus
 };

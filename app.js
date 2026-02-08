@@ -78,6 +78,10 @@ app.use(cors({
 // BODY PARSING & LOGGING
 // ============================================
 
+// CRITICAL: Stripe webhook endpoint needs raw body for signature verification
+// This middleware must come BEFORE express.json()
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
 // Body parser - Parse JSON request bodies
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

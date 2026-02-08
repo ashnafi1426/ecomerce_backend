@@ -13,7 +13,11 @@ const cartService = require('../../services/cartServices/cart.service');
 const getCart = async (req, res, next) => {
   try {
     const cart = await cartService.getCart(req.user.id);
-    res.json(cart);
+    
+    // Format cart items for display with variant attributes
+    const formattedCart = cartService.formatCartItemsForDisplay(cart);
+    
+    res.json(formattedCart);
   } catch (error) {
     next(error);
   }
@@ -51,7 +55,7 @@ const getCartCount = async (req, res, next) => {
  */
 const addItem = async (req, res, next) => {
   try {
-    const { productId, quantity } = req.body;
+    const { productId, quantity, variantId } = req.body;
 
     if (!productId) {
       return res.status(400).json({
@@ -69,14 +73,14 @@ const addItem = async (req, res, next) => {
       });
     }
 
-    const cartItem = await cartService.addItem(req.user.id, productId, qty);
+    const cartItem = await cartService.addItem(req.user.id, productId, qty, variantId || null);
 
     res.status(201).json({
       message: 'Item added to cart successfully',
       cartItem
     });
   } catch (error) {
-    if (error.message === 'Product not found') {
+    if (error.message === 'Product not found' || error.message.includes('Variant')) {
       return res.status(404).json({
         error: 'Not Found',
         message: error.message
@@ -99,7 +103,7 @@ const addItem = async (req, res, next) => {
 const updateQuantity = async (req, res, next) => {
   try {
     const { productId } = req.params;
-    const { quantity } = req.body;
+    const { quantity, variantId } = req.body;
 
     if (quantity === undefined || quantity <= 0) {
       return res.status(400).json({
@@ -108,7 +112,12 @@ const updateQuantity = async (req, res, next) => {
       });
     }
 
-    const cartItem = await cartService.updateQuantity(req.user.id, productId, quantity);
+    const cartItem = await cartService.updateQuantity(
+      req.user.id, 
+      productId, 
+      quantity, 
+      variantId || null
+    );
 
     res.json({
       message: 'Cart item updated successfully',
@@ -132,7 +141,9 @@ const updateQuantity = async (req, res, next) => {
 const removeItem = async (req, res, next) => {
   try {
     const { productId } = req.params;
-    await cartService.removeItem(req.user.id, productId);
+    const { variantId } = req.query; // Get variantId from query params
+    
+    await cartService.removeItem(req.user.id, productId, variantId || null);
 
     res.json({
       message: 'Item removed from cart successfully'

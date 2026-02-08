@@ -2,7 +2,7 @@
  * PRODUCT SERVICE
  * 
  * Business logic layer for product operations.
- * Database operations using Supabase.
+ * Phase 3: Multi-vendor product management with approval workflow
  */
 
 const supabase = require('../../config/supabase');
@@ -18,7 +18,9 @@ const findById = async (id) => {
     .select(`
       *,
       category:categories(id, name),
-      inventory(quantity, reserved_quantity)
+      inventory(quantity, reserved_quantity),
+      seller:users!products_seller_id_fkey(id, display_name, business_name, email),
+      approved_by_user:users!products_approved_by_fkey(id, display_name, email)
     `)
     .eq('id', id)
     .single();
@@ -32,7 +34,7 @@ const findById = async (id) => {
 };
 
 /**
- * Get all products
+ * Get all products with filters
  * @param {Object} filters - Filter options
  * @returns {Promise<Array>} Array of product objects
  */
@@ -42,12 +44,21 @@ const findAll = async (filters = {}) => {
     .select(`
       *,
       category:categories(id, name),
-      inventory(quantity, reserved_quantity)
+      inventory(quantity, reserved_quantity),
+      seller:users!products_seller_id_fkey(id, display_name, business_name, email)
     `)
     .order('created_at', { ascending: false });
 
   if (filters.status) {
     query = query.eq('status', filters.status);
+  }
+
+  if (filters.approvalStatus) {
+    query = query.eq('approval_status', filters.approvalStatus);
+  }
+
+  if (filters.sellerId) {
+    query = query.eq('seller_id', filters.sellerId);
   }
 
   if (filters.categoryId) {
@@ -71,21 +82,34 @@ const findAll = async (filters = {}) => {
 
 /**
  * Search products by title
- * @param {String} searchTerm - Search term
- * @param {Number} limit - Limit results
+ * @param {Object} filters - Search filters
  * @returns {Promise<Array>} Array of product objects
  */
-const search = async (searchTerm, limit = 20) => {
-  const { data, error } = await supabase
+const search = async (filters) => {
+  let query = supabase
     .from('products')
     .select(`
       *,
       category:categories(id, name),
-      inventory(quantity)
+      inventory(quantity),
+      seller:users!products_seller_id_fkey(id, display_name, business_name)
     `)
-    .eq('status', 'active')
-    .ilike('title', `%${searchTerm}%`)
-    .limit(limit);
+    .ilike('title', `%${filters.searchTerm}%`)
+    .limit(filters.limit || 20);
+
+  if (filters.approvalStatus) {
+    query = query.eq('approval_status', filters.approvalStatus);
+  }
+
+  if (filters.sellerId) {
+    query = query.eq('seller_id', filters.sellerId);
+  }
+
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+  
+  const { data, error } = await query;
   
   if (error) throw error;
   
@@ -106,14 +130,21 @@ const create = async (productData) => {
       price: productData.price,
       image_url: productData.imageUrl,
       category_id: productData.categoryId || null,
+      seller_id: productData.sellerId,
       status: productData.status || 'active',
-      created_by: productData.createdBy
+      approval_status: productData.approvalStatus || 'pending',
+      created_by: productData.sellerId
     }])
-    .select()
+    .select(`
+      *,
+      category:categories(id, name),
+      seller:users!products_seller_id_fkey(id, display_name, business_name, email)
+    `)
     .single();
   
   if (productError) throw productError;
 
+  // Create inventory record
   const { error: inventoryError } = await supabase
     .from('inventory')
     .insert([{
@@ -142,6 +173,10 @@ const update = async (id, updates) => {
   if (updates.image_url !== undefined) updateData.image_url = updates.image_url;
   if (updates.category_id !== undefined) updateData.category_id = updates.category_id;
   if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.approval_status !== undefined) updateData.approval_status = updates.approval_status;
+  if (updates.approved_by !== undefined) updateData.approved_by = updates.approved_by;
+  if (updates.approved_at !== undefined) updateData.approved_at = updates.approved_at;
+  if (updates.rejection_reason !== undefined) updateData.rejection_reason = updates.rejection_reason;
   
   updateData.updated_at = new Date().toISOString();
 
@@ -149,12 +184,48 @@ const update = async (id, updates) => {
     .from('products')
     .update(updateData)
     .eq('id', id)
-    .select()
+    .select(`
+      *,
+      category:categories(id, name),
+      seller:users!products_seller_id_fkey(id, display_name, business_name, email),
+      approved_by_user:users!products_approved_by_fkey(id, display_name, email)
+    `)
     .single();
   
   if (error) throw error;
   
   return data;
+};
+
+/**
+ * Approve product (Manager/Admin)
+ * @param {String} productId - Product UUID
+ * @param {String} managerId - Manager/Admin UUID
+ * @returns {Promise<Object>} Updated product object
+ */
+const approveProduct = async (productId, managerId) => {
+  return await update(productId, {
+    approval_status: 'approved',
+    approved_by: managerId,
+    approved_at: new Date().toISOString(),
+    rejection_reason: null
+  });
+};
+
+/**
+ * Reject product (Manager/Admin)
+ * @param {String} productId - Product UUID
+ * @param {String} managerId - Manager/Admin UUID
+ * @param {String} reason - Rejection reason
+ * @returns {Promise<Object>} Updated product object
+ */
+const rejectProduct = async (productId, managerId, reason) => {
+  return await update(productId, {
+    approval_status: 'rejected',
+    approved_by: managerId,
+    approved_at: new Date().toISOString(),
+    rejection_reason: reason
+  });
 };
 
 /**
@@ -194,18 +265,26 @@ const updateInventory = async (productId, quantity) => {
 };
 
 /**
- * Get low stock products
+ * Get low stock products (seller-specific or all)
+ * @param {String} sellerId - Optional seller ID filter
  * @returns {Promise<Array>} Array of low stock products
  */
-const getLowStock = async () => {
-  const { data, error } = await supabase
+const getLowStock = async (sellerId = null) => {
+  let query = supabase
     .from('products')
     .select(`
       *,
-      inventory(quantity, low_stock_threshold)
+      inventory(quantity, low_stock_threshold),
+      seller:users!products_seller_id_fkey(id, display_name, business_name)
     `)
     .eq('status', 'active')
     .order('inventory.quantity', { ascending: true });
+
+  if (sellerId) {
+    query = query.eq('seller_id', sellerId);
+  }
+  
+  const { data, error } = await query;
   
   if (error) throw error;
   
@@ -224,6 +303,8 @@ module.exports = {
   search,
   create,
   update,
+  approveProduct,
+  rejectProduct,
   deleteProduct,
   updateInventory,
   getLowStock

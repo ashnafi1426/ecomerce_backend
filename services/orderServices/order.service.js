@@ -2,10 +2,18 @@
  * ORDER SERVICE
  * 
  * Business logic layer for order operations.
- * Database operations using Supabase.
+ * Handles order creation, status lifecycle, and management.
  */
 
 const supabase = require('../../config/supabase');
+const cartService = require('../cartServices/cart.service');
+const inventoryService = require('../inventoryServices/inventory.service');
+const variantInventoryService = require('../variantServices/variantInventory.service');
+const commissionService = require('../commissionServices/commission.service');
+const sellerBalanceService = require('../sellerBalanceServices/sellerBalance.service');
+const subOrderService = require('../subOrderServices/subOrder.service');
+const discountCalculatorService = require('../discountServices/discountCalculator.service');
+const couponService = require('../couponServices/coupon.service');
 
 /**
  * Find order by ID
@@ -15,25 +23,13 @@ const supabase = require('../../config/supabase');
 const findById = async (id) => {
   const { data, error } = await supabase
     .from('orders')
-    .select(`
-      *,
-      user:users(email, display_name),
-      payment:payments(status)
-    `)
+    .select('*')
     .eq('id', id)
     .single();
   
   if (error) {
     if (error.code === 'PGRST116') return null;
     throw error;
-  }
-  
-  if (data) {
-    data.customer_email = data.user?.email;
-    data.customer_name = data.user?.display_name;
-    data.payment_status = data.payment?.[0]?.status;
-    delete data.user;
-    delete data.payment;
   }
   
   return data;
@@ -48,10 +44,7 @@ const findById = async (id) => {
 const findByUserId = async (userId, filters = {}) => {
   let query = supabase
     .from('orders')
-    .select(`
-      *,
-      payment:payments(status)
-    `)
+    .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -67,11 +60,7 @@ const findByUserId = async (userId, filters = {}) => {
   
   if (error) throw error;
   
-  return (data || []).map(order => ({
-    ...order,
-    payment_status: order.payment?.[0]?.status,
-    payment: undefined
-  }));
+  return data || [];
 };
 
 /**
@@ -82,11 +71,7 @@ const findByUserId = async (userId, filters = {}) => {
 const findAll = async (filters = {}) => {
   let query = supabase
     .from('orders')
-    .select(`
-      *,
-      user:users(email, display_name),
-      payment:payments(status)
-    `)
+    .select('*')
     .order('created_at', { ascending: false });
 
   if (filters.status) {
@@ -109,18 +94,251 @@ const findAll = async (filters = {}) => {
   
   if (error) throw error;
   
-  return (data || []).map(order => ({
-    ...order,
-    customer_email: order.user?.email,
-    customer_name: order.user?.display_name,
-    payment_status: order.payment?.[0]?.status,
-    user: undefined,
-    payment: undefined
-  }));
+  return data || [];
 };
 
 /**
- * Create new order
+ * Create new order from cart
+ * Implements Requirements 2.7, 2.14, 2.15
+ * @param {String} userId - User UUID
+ * @param {Object} orderData - Order data (paymentIntentId, shippingAddress, couponCode)
+ * @returns {Promise<Object>} Created order object
+ */
+const createFromCart = async (userId, orderData) => {
+  // Get user's cart
+  const cartItems = await cartService.getCart(userId);
+  
+  if (cartItems.length === 0) {
+    throw new Error('Cart is empty');
+  }
+
+  // Validate cart
+  const validation = await cartService.validateCart(userId);
+  if (!validation.valid) {
+    throw new Error(`Cart validation failed: ${validation.errors.join(', ')}`);
+  }
+
+  // Calculate total amount and commission
+  let subtotal = 0;
+  let totalCommission = 0;
+  const basket = [];
+  const sellerAmounts = {}; // Track amounts per seller
+  const discountItems = []; // Items for discount calculation
+
+  for (const item of cartItems) {
+    if (item.product && item.product.status === 'active') {
+      // Determine price: use variant price if variant exists, otherwise product price
+      let itemPrice = item.product.price;
+      let variantInfo = null;
+      
+      // If item has variant_id, get variant details
+      if (item.variant_id) {
+        const { data: variant } = await supabase
+          .from('product_variants')
+          .select('id, variant_name, sku, price, attributes, images')
+          .eq('id', item.variant_id)
+          .single();
+        
+        if (variant) {
+          itemPrice = variant.price;
+          variantInfo = {
+            variant_id: variant.id,
+            variant_name: variant.variant_name,
+            sku: variant.sku,
+            attributes: variant.attributes,
+            variant_images: variant.images
+          };
+        }
+      }
+      
+      const itemTotal = item.quantity * itemPrice;
+      subtotal += itemTotal;
+      
+      // Get full product details including seller_id and category_id
+      const { data: productDetails } = await supabase
+        .from('products')
+        .select('seller_id, category_id')
+        .eq('id', item.product_id)
+        .single();
+      
+      // Build basket item with variant information
+      const basketItem = {
+        product_id: item.product_id,
+        title: item.product.title,
+        price: itemPrice,
+        quantity: item.quantity,
+        image_url: item.product.image_url,
+        seller_id: productDetails?.seller_id || null,
+        category_id: productDetails?.category_id || null
+      };
+      
+      // Add variant information if present
+      if (variantInfo) {
+        basketItem.variant_id = variantInfo.variant_id;
+        basketItem.variant_name = variantInfo.variant_name;
+        basketItem.sku = variantInfo.sku;
+        basketItem.attributes = variantInfo.attributes;
+        if (variantInfo.variant_images && variantInfo.variant_images.length > 0) {
+          basketItem.image_url = variantInfo.variant_images[0]; // Use first variant image
+        }
+      }
+      
+      basket.push(basketItem);
+      
+      // Add to discount items
+      discountItems.push({
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        category_id: productDetails?.category_id,
+        price: itemPrice,
+        quantity: item.quantity,
+        name: item.product.title
+      });
+    }
+  }
+
+  // Calculate discounts (promotional + coupon)
+  const discountResult = await discountCalculatorService.calculateOrderDiscounts(
+    {
+      items: discountItems,
+      subtotal,
+      couponCode: orderData.couponCode
+    },
+    userId
+  );
+
+  if (!discountResult.success) {
+    throw new Error(discountResult.error || 'Failed to calculate discounts');
+  }
+
+  // Calculate final amount after discounts
+  const totalAmount = discountResult.finalTotal;
+  const promotionalDiscount = discountResult.promotionalDiscount || 0;
+  const couponDiscount = discountResult.couponDiscount || 0;
+  const totalDiscount = discountResult.totalDiscount || 0;
+
+  // Update basket with promotional prices
+  if (discountResult.itemsWithPromotions) {
+    for (let i = 0; i < basket.length; i++) {
+      const itemWithPromo = discountResult.itemsWithPromotions[i];
+      if (itemWithPromo && itemWithPromo.promotionalPrice < basket[i].price) {
+        basket[i].original_price = basket[i].price;
+        basket[i].price = itemWithPromo.promotionalPrice;
+        basket[i].promotional_discount = itemWithPromo.promotionalDiscount;
+      }
+    }
+  }
+
+  // Calculate commission on final amount (after discounts)
+  for (const item of basket) {
+    const itemTotal = item.quantity * item.price;
+    
+    // Calculate commission for this item
+    let itemCommission = 0;
+    if (item.seller_id) {
+      const commissionRate = await commissionService.getApplicableRate(
+        item.seller_id,
+        item.category_id
+      );
+      
+      const itemTotalCents = Math.round(itemTotal * 100);
+      itemCommission = commissionService.calculateCommission(
+        itemTotalCents,
+        commissionRate.commission_percentage
+      );
+      
+      totalCommission += itemCommission;
+      
+      // Track seller amounts for escrow
+      if (!sellerAmounts[item.seller_id]) {
+        sellerAmounts[item.seller_id] = {
+          amount: 0,
+          commission: 0
+        };
+      }
+      sellerAmounts[item.seller_id].amount += itemTotalCents;
+      sellerAmounts[item.seller_id].commission += itemCommission;
+    }
+  }
+
+  // Reserve inventory for all items (handle both variants and regular products)
+  for (const item of basket) {
+    if (item.variant_id) {
+      // Reserve variant inventory
+      await variantInventoryService.reserveInventory(item.variant_id, item.quantity);
+    } else {
+      // Reserve regular product inventory
+      await inventoryService.reserve(item.product_id, item.quantity);
+    }
+  }
+
+  // Determine primary seller (for single-vendor orders)
+  const sellers = Object.keys(sellerAmounts);
+  const primarySellerId = sellers.length === 1 ? sellers[0] : null;
+
+  // Create order with commission and discounts
+  const orderAmountCents = Math.round(totalAmount * 100);
+  const { data, error } = await supabase
+    .from('orders')
+    .insert([{
+      user_id: userId,
+      payment_intent_id: orderData.paymentIntentId || `pi_${Date.now()}`,
+      amount: orderAmountCents,
+      basket: basket,
+      shipping_address: orderData.shippingAddress,
+      status: 'pending_payment',
+      seller_id: primarySellerId,
+      commission_amount: totalCommission / 100, // Store in dollars
+      seller_payout_amount: (orderAmountCents - totalCommission) / 100, // Store in dollars
+      coupon_id: discountResult.couponDetails?.id || null,
+      coupon_code: orderData.couponCode || null,
+      discount_amount: couponDiscount,
+      promotional_discount: promotionalDiscount
+    }])
+    .select()
+    .single();
+  
+  if (error) {
+    // Release inventory if order creation fails
+    for (const item of basket) {
+      if (item.variant_id) {
+        await variantInventoryService.releaseInventory(item.variant_id, item.quantity);
+      } else {
+        await inventoryService.release(item.product_id, item.quantity);
+      }
+    }
+    throw error;
+  }
+
+  // Apply coupon if used
+  if (orderData.couponCode && discountResult.couponDetails) {
+    await couponService.applyCoupon(orderData.couponCode, userId, data.id);
+  }
+
+  // Update seller escrow balances
+  for (const [sellerId, amounts] of Object.entries(sellerAmounts)) {
+    const sellerPayout = amounts.amount - amounts.commission;
+    await sellerBalanceService.addToEscrow(sellerId, sellerPayout, data.id);
+    await sellerBalanceService.recordCommission(sellerId, amounts.commission);
+  }
+
+  // Create sub-orders for multi-vendor orders
+  if (sellers.length > 1) {
+    await subOrderService.createSubOrders(data.id, basket);
+  }
+
+  // Clear cart after successful order creation
+  await cartService.clearCart(userId);
+  
+  // Return order with discount breakdown
+  return {
+    ...data,
+    discount_breakdown: discountResult.breakdown
+  };
+};
+
+/**
+ * Create new order (legacy method)
  * @param {Object} orderData - Order data
  * @returns {Promise<Object>} Created order object
  */
@@ -144,22 +362,72 @@ const create = async (orderData) => {
 };
 
 /**
- * Update order status
+ * Update order status with lifecycle validation
  * @param {String} id - Order UUID
- * @param {String} status - New status
+ * @param {String} newStatus - New status
  * @param {String} adminId - Admin user ID (optional)
  * @returns {Promise<Object>} Updated order object
  */
-const updateStatus = async (id, status, adminId = null) => {
+const updateStatus = async (id, newStatus, adminId = null) => {
+  // Get current order
+  const order = await findById(id);
+  if (!order) {
+    throw new Error('Order not found');
+  }
+
+  // Validate status transition
+  const validTransitions = {
+    'pending_payment': ['paid', 'cancelled'],
+    'paid': ['confirmed', 'cancelled'],
+    'confirmed': ['packed', 'cancelled'],
+    'packed': ['shipped', 'cancelled'],
+    'shipped': ['delivered', 'cancelled'],
+    'delivered': [],
+    'cancelled': [],
+    'refunded': []
+  };
+
+  const allowedStatuses = validTransitions[order.status] || [];
+  if (!allowedStatuses.includes(newStatus)) {
+    throw new Error(`Cannot transition from ${order.status} to ${newStatus}`);
+  }
+
   const updateData = {
-    status,
+    status: newStatus,
     updated_at: new Date().toISOString()
   };
 
-  if (status === 'shipped' || status === 'delivered') {
+  // Handle status-specific logic
+  if (newStatus === 'paid') {
+    // Fulfill inventory reservations (handle both variants and regular products)
+    if (order.basket && Array.isArray(order.basket)) {
+      for (const item of order.basket) {
+        if (item.variant_id) {
+          await variantInventoryService.fulfillInventory(item.variant_id, item.quantity);
+        } else {
+          await inventoryService.fulfill(item.product_id, item.quantity);
+        }
+      }
+    }
+  }
+
+  if (newStatus === 'shipped' || newStatus === 'delivered') {
     updateData.fulfilled_at = new Date().toISOString();
     if (adminId) {
       updateData.fulfilled_by = adminId;
+    }
+  }
+
+  if (newStatus === 'cancelled') {
+    // Release inventory reservations if order was not yet paid (handle both variants and regular products)
+    if (order.status === 'pending_payment' && order.basket && Array.isArray(order.basket)) {
+      for (const item of order.basket) {
+        if (item.variant_id) {
+          await variantInventoryService.releaseInventory(item.variant_id, item.quantity);
+        } else {
+          await inventoryService.release(item.product_id, item.quantity);
+        }
+      }
     }
   }
 
@@ -173,6 +441,86 @@ const updateStatus = async (id, status, adminId = null) => {
   if (error) throw error;
   
   return data;
+};
+
+/**
+ * Cancel order
+ * @param {String} id - Order UUID
+ * @param {String} userId - User ID (for authorization)
+ * @returns {Promise<Object>} Updated order object
+ */
+const cancelOrder = async (id, userId) => {
+  const order = await findById(id);
+  
+  if (!order) {
+    throw new Error('Order not found');
+  }
+
+  if (order.user_id !== userId) {
+    throw new Error('Unauthorized to cancel this order');
+  }
+
+  if (!['pending_payment', 'paid', 'confirmed'].includes(order.status)) {
+    throw new Error(`Cannot cancel order with status: ${order.status}`);
+  }
+
+  return await updateStatus(id, 'cancelled');
+};
+
+/**
+ * Generate invoice for order
+ * @param {String} id - Order UUID
+ * @returns {Promise<Object>} Invoice data
+ */
+const generateInvoice = async (id) => {
+  const order = await findById(id);
+  
+  if (!order) {
+    throw new Error('Order not found');
+  }
+
+  // Get user details
+  const { data: user } = await supabase
+    .from('users')
+    .select('email, display_name, phone')
+    .eq('id', order.user_id)
+    .single();
+
+  // Calculate totals
+  let subtotal = 0;
+  const items = order.basket || [];
+  
+  items.forEach(item => {
+    subtotal += item.price * item.quantity;
+  });
+
+  const tax = subtotal * 0.1; // 10% tax
+  const shipping = 10.00; // Flat shipping
+  const total = subtotal + tax + shipping;
+
+  return {
+    invoice_number: `INV-${order.id.substring(0, 8).toUpperCase()}`,
+    order_id: order.id,
+    order_date: order.created_at,
+    status: order.status,
+    customer: {
+      name: user?.display_name || 'N/A',
+      email: user?.email || 'N/A',
+      phone: user?.phone || 'N/A'
+    },
+    shipping_address: order.shipping_address,
+    items: items.map(item => ({
+      title: item.title,
+      quantity: item.quantity,
+      unit_price: item.price,
+      total: item.price * item.quantity
+    })),
+    subtotal: parseFloat(subtotal.toFixed(2)),
+    tax: parseFloat(tax.toFixed(2)),
+    shipping: shipping,
+    total: parseFloat(total.toFixed(2)),
+    payment_intent_id: order.payment_intent_id
+  };
 };
 
 /**
@@ -223,21 +571,129 @@ const getStatistics = async () => {
 const getRecent = async (limit = 10) => {
   const { data, error } = await supabase
     .from('orders')
-    .select(`
-      *,
-      user:users(email, display_name)
-    `)
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(limit);
   
   if (error) throw error;
   
-  return (data || []).map(order => ({
+  return data || [];
+};
+
+/**
+ * Check if order is eligible for delivery rating
+ * Implements Requirement 3.1
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Eligibility status
+ */
+const isEligibleForDeliveryRating = async (orderId) => {
+  const order = await findById(orderId);
+  
+  if (!order) {
+    return { eligible: false, reason: 'Order not found' };
+  }
+
+  if (order.status !== 'delivered') {
+    return { eligible: false, reason: 'Order must be delivered to submit rating' };
+  }
+
+  // Check if within 30-day window
+  const deliveredDate = new Date(order.fulfilled_at || order.updated_at);
+  const now = new Date();
+  const daysSinceDelivery = Math.floor((now - deliveredDate) / (1000 * 60 * 60 * 24));
+
+  if (daysSinceDelivery > 30) {
+    return { eligible: false, reason: 'Rating window has expired (30 days)' };
+  }
+
+  return { eligible: true, daysRemaining: 30 - daysSinceDelivery };
+};
+
+/**
+ * Get order details with delivery rating
+ * Implements Requirement 3.17
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Order with rating details
+ */
+const getOrderWithDeliveryRating = async (orderId) => {
+  const order = await findById(orderId);
+  
+  if (!order) {
+    return null;
+  }
+
+  // Get delivery rating if exists
+  const { data: rating } = await supabase
+    .from('delivery_ratings')
+    .select('*')
+    .eq('order_id', orderId)
+    .single();
+
+  return {
     ...order,
-    customer_email: order.user?.email,
-    customer_name: order.user?.display_name,
-    user: undefined
-  }));
+    delivery_rating: rating || null,
+    can_rate_delivery: await isEligibleForDeliveryRating(orderId)
+  };
+};
+
+/**
+ * Check if order is eligible for replacement
+ * Implements Requirement 4.1
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Eligibility status
+ */
+const isEligibleForReplacement = async (orderId) => {
+  const order = await findById(orderId);
+  
+  if (!order) {
+    return { eligible: false, reason: 'Order not found' };
+  }
+  
+  // Check if order is delivered
+  if (order.status !== 'delivered') {
+    return { eligible: false, reason: 'Order must be delivered to request replacement' };
+  }
+  
+  // Check if within 30-day window
+  const deliveredDate = new Date(order.delivered_at || order.updated_at);
+  const now = new Date();
+  const daysSinceDelivery = Math.floor((now - deliveredDate) / (1000 * 60 * 60 * 24));
+  
+  if (daysSinceDelivery > 30) {
+    return { eligible: false, reason: 'Replacement window (30 days) has expired' };
+  }
+  
+  return { eligible: true, daysRemaining: 30 - daysSinceDelivery };
+};
+
+/**
+ * Get order details with replacement history
+ * Implements Requirement 4.15
+ * @param {String} orderId - Order UUID
+ * @returns {Promise<Object>} Order with replacement details
+ */
+const getOrderWithReplacements = async (orderId) => {
+  const order = await findById(orderId);
+  
+  if (!order) {
+    throw new Error('Order not found');
+  }
+  
+  // Get replacement requests for this order
+  const { data: replacements } = await supabase
+    .from('replacement_requests')
+    .select(`
+      *,
+      replacement_shipments (*)
+    `)
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: false });
+  
+  return {
+    ...order,
+    replacements: replacements || [],
+    can_request_replacement: await isEligibleForReplacement(orderId)
+  };
 };
 
 module.exports = {
@@ -245,7 +701,14 @@ module.exports = {
   findByUserId,
   findAll,
   create,
+  createFromCart,
   updateStatus,
+  cancelOrder,
+  generateInvoice,
   getStatistics,
-  getRecent
+  getRecent,
+  isEligibleForDeliveryRating,
+  getOrderWithDeliveryRating,
+  isEligibleForReplacement,
+  getOrderWithReplacements
 };

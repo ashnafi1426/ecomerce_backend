@@ -1,9 +1,3 @@
-/**
- * ENVIRONMENT CONFIGURATION
- * 
- * Centralized configuration management for environment variables.
- * Validates and exports all required configuration values.
- */
 
 require('dotenv').config();
 

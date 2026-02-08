@@ -3,6 +3,8 @@
  * 
  * Routes for user registration, login, and profile management.
  * Includes input validation and sanitization.
+ * 
+ * Phase 2: Added seller registration routes
  */
 
 const express = require('express');
@@ -24,6 +26,13 @@ router.post(
   authController.register
 );
 
+// Phase 2: Seller registration
+router.post(
+  '/api/auth/register/seller',
+  sanitizeInput,
+  authController.registerSeller
+);
+
 router.post(
   '/api/auth/login',
   sanitizeInput,
@@ -41,5 +50,8 @@ router.put(
   validateProfileUpdate,
   authController.updateProfile
 );
+
+// Phase 2: Seller status check
+router.get('/api/auth/seller/status', authenticate, authController.getSellerStatus);
 
 module.exports = router;

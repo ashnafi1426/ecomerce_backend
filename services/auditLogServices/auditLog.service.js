@@ -13,15 +13,23 @@ const supabase = require('../../config/supabase');
  * @returns {Promise<Object>} Created log object
  */
 const log = async (logData) => {
-  const { data, error } = await supabase
+  const { data, error} = await supabase
     .from('audit_log')
     .insert([{
       table_name: logData.tableName,
-      operation: logData.operation,
-      user_id: logData.userId || null,
+      action: logData.operation || logData.action, // Support both old and new naming
+      action_type: logData.actionType || logData.operation?.toLowerCase(),
+      entity_type: logData.entityType || logData.tableName,
+      entity_id: logData.entityId || null,
+      performed_by: logData.userId || logData.performedBy || null,
+      user_role: logData.userRole || null,
+      user_email: logData.userEmail || null,
       old_data: logData.oldData || null,
       new_data: logData.newData || null,
-      ip_address: logData.ipAddress || null
+      changes: logData.changes || null,
+      session_id: logData.sessionId || null,
+      request_id: logData.requestId || null,
+      severity: logData.severity || 'info'
     }])
     .select()
     .single();
@@ -42,7 +50,7 @@ const findByTable = async (tableName, options = {}) => {
     .from('audit_log')
     .select('*')
     .eq('table_name', tableName)
-    .order('created_at', { ascending: false });
+    .order('performed_at', { ascending: false });
 
   if (options.limit) {
     query = query.limit(options.limit);
@@ -69,8 +77,8 @@ const findByUserId = async (userId, options = {}) => {
   let query = supabase
     .from('audit_log')
     .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .eq('performed_by', userId)
+    .order('performed_at', { ascending: false });
 
   if (options.limit) {
     query = query.limit(options.limit);
@@ -88,8 +96,8 @@ const findByUserId = async (userId, options = {}) => {
 };
 
 /**
- * Find logs by operation type
- * @param {String} operation - Operation type (INSERT, UPDATE, DELETE)
+ * Find logs by operation/action type
+ * @param {String} operation - Operation type (INSERT, UPDATE, DELETE) or action
  * @param {Object} options - Query options
  * @returns {Promise<Array>} Array of log objects
  */
@@ -97,8 +105,8 @@ const findByOperation = async (operation, options = {}) => {
   let query = supabase
     .from('audit_log')
     .select('*')
-    .eq('operation', operation)
-    .order('created_at', { ascending: false });
+    .eq('action', operation)
+    .order('performed_at', { ascending: false });
 
   if (options.limit) {
     query = query.limit(options.limit);
@@ -120,7 +128,7 @@ const getRecent = async (limit = 50) => {
   const { data, error } = await supabase
     .from('audit_log')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('performed_at', { ascending: false })
     .limit(limit);
   
   if (error) throw error;
@@ -139,9 +147,9 @@ const findByDateRange = async (startDate, endDate, options = {}) => {
   let query = supabase
     .from('audit_log')
     .select('*')
-    .gte('created_at', startDate)
-    .lte('created_at', endDate)
-    .order('created_at', { ascending: false });
+    .gte('performed_at', startDate)
+    .lte('performed_at', endDate)
+    .order('performed_at', { ascending: false });
 
   if (options.limit) {
     query = query.limit(options.limit);
@@ -161,25 +169,22 @@ const findByDateRange = async (startDate, endDate, options = {}) => {
 const getStatistics = async () => {
   const { data: logs, error } = await supabase
     .from('audit_log')
-    .select('operation, table_name');
+    .select('action, table_name');
   
   if (error) throw error;
   
   const stats = {
     total_logs: logs.length,
-    by_operation: {
-      INSERT: 0,
-      UPDATE: 0,
-      DELETE: 0
-    },
+    by_action: {},
     by_table: {}
   };
 
   logs.forEach(log => {
-    // Count by operation
-    if (stats.by_operation[log.operation] !== undefined) {
-      stats.by_operation[log.operation]++;
+    // Count by action
+    if (!stats.by_action[log.action]) {
+      stats.by_action[log.action] = 0;
     }
+    stats.by_action[log.action]++;
 
     // Count by table
     if (!stats.by_table[log.table_name]) {
@@ -200,26 +205,30 @@ const search = async (filters) => {
   let query = supabase
     .from('audit_log')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('performed_at', { ascending: false });
 
   if (filters.tableName) {
     query = query.eq('table_name', filters.tableName);
   }
 
-  if (filters.operation) {
-    query = query.eq('operation', filters.operation);
+  if (filters.operation || filters.action) {
+    query = query.eq('action', filters.operation || filters.action);
   }
 
-  if (filters.userId) {
-    query = query.eq('user_id', filters.userId);
+  if (filters.userId || filters.performedBy) {
+    query = query.eq('performed_by', filters.userId || filters.performedBy);
   }
 
   if (filters.startDate) {
-    query = query.gte('created_at', filters.startDate);
+    query = query.gte('performed_at', filters.startDate);
   }
 
   if (filters.endDate) {
-    query = query.lte('created_at', filters.endDate);
+    query = query.lte('performed_at', filters.endDate);
+  }
+
+  if (filters.severity) {
+    query = query.eq('severity', filters.severity);
   }
 
   if (filters.limit) {
@@ -245,7 +254,7 @@ const cleanup = async (daysToKeep = 90) => {
   const { data, error } = await supabase
     .from('audit_log')
     .delete()
-    .lt('created_at', cutoffDate.toISOString())
+    .lt('performed_at', cutoffDate.toISOString())
     .select();
   
   if (error) throw error;

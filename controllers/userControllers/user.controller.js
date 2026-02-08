@@ -452,6 +452,224 @@ const searchUsers = async (req, res, next) => {
   }
 };
 
+// ============================================
+// PHASE 2: MANAGER & SELLER OPERATIONS
+// ============================================
+
+/**
+ * Create manager account (Admin only)
+ * POST /api/admin/users/manager
+ */
+const createManager = async (req, res, next) => {
+  try {
+    const { email, password, displayName, phone } = req.body;
+
+    // Validation
+    if (!email || !password || !displayName) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Email, password, and display name are required'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Invalid email format'
+      });
+    }
+
+    // Validate password length
+    if (password.length < 8) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Password must be at least 8 characters'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await userService.findByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Email already registered'
+      });
+    }
+
+    // Hash password
+    const passwordHash = await hashPassword(password);
+
+    // Create manager account
+    const manager = await userService.createManager({
+      email,
+      passwordHash,
+      displayName,
+      phone: phone || null
+    });
+
+    res.status(201).json({
+      message: 'Manager account created successfully',
+      manager: {
+        id: manager.id,
+        email: manager.email,
+        role: manager.role,
+        displayName: manager.display_name,
+        phone: manager.phone,
+        status: manager.status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get all sellers (Admin/Manager)
+ * GET /api/admin/sellers
+ */
+const getAllSellers = async (req, res, next) => {
+  try {
+    const { verificationStatus, status, limit, offset } = req.query;
+
+    const sellers = await userService.findAllSellers({
+      verificationStatus,
+      status,
+      limit: limit ? parseInt(limit) : undefined,
+      offset: offset ? parseInt(offset) : undefined
+    });
+
+    res.json({
+      count: sellers.length,
+      sellers
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get seller by ID (Admin/Manager)
+ * GET /api/admin/sellers/:id
+ */
+const getSellerById = async (req, res, next) => {
+  try {
+    const seller = await userService.findSellerById(req.params.id);
+
+    if (!seller) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Seller not found'
+      });
+    }
+
+    res.json(seller);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update seller verification status (Admin only)
+ * PUT /api/admin/sellers/:id/status
+ */
+const updateSellerVerificationStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+
+    const validStatuses = ['pending', 'verified', 'rejected'];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+
+    const seller = await userService.updateSellerStatus(req.params.id, status);
+
+    res.json({
+      message: `Seller ${status} successfully`,
+      seller: {
+        id: seller.id,
+        email: seller.email,
+        businessName: seller.business_name,
+        verificationStatus: seller.verification_status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Approve seller (Admin only)
+ * POST /api/admin/sellers/:id/approve
+ */
+const approveSeller = async (req, res, next) => {
+  try {
+    const seller = await userService.updateSellerStatus(req.params.id, 'verified');
+
+    res.json({
+      message: 'Seller approved successfully',
+      seller: {
+        id: seller.id,
+        email: seller.email,
+        businessName: seller.business_name,
+        verificationStatus: seller.verification_status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Reject seller (Admin only)
+ * POST /api/admin/sellers/:id/reject
+ */
+const rejectSeller = async (req, res, next) => {
+  try {
+    const seller = await userService.updateSellerStatus(req.params.id, 'rejected');
+
+    res.json({
+      message: 'Seller rejected',
+      seller: {
+        id: seller.id,
+        email: seller.email,
+        businessName: seller.business_name,
+        verificationStatus: seller.verification_status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get all managers (Admin only)
+ * GET /api/admin/managers
+ */
+const getAllManagers = async (req, res, next) => {
+  try {
+    const { status, limit, offset } = req.query;
+
+    const managers = await userService.findAllManagers({
+      status,
+      limit: limit ? parseInt(limit) : undefined,
+      offset: offset ? parseInt(offset) : undefined
+    });
+
+    res.json({
+      count: managers.length,
+      managers
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   // Customer operations
   getMyProfile,
@@ -470,5 +688,14 @@ module.exports = {
   unblockUser,
   assignRole,
   deleteUser,
-  searchUsers
+  searchUsers,
+
+  // Phase 2: Manager & Seller operations
+  createManager,
+  getAllSellers,
+  getSellerById,
+  updateSellerVerificationStatus,
+  approveSeller,
+  rejectSeller,
+  getAllManagers
 };
