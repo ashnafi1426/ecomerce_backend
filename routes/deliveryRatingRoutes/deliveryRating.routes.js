@@ -12,12 +12,14 @@ const router = express.Router();
 const deliveryRatingController = require('../../controllers/deliveryRatingControllers/deliveryRating.controller');
 const authMiddleware = require('../../middlewares/auth.middleware');
 const roleMiddleware = require('../../middlewares/role.middleware');
+const { ratingSubmissionLimiter } = require('../../middlewares/rateLimiter.middleware');
 
 // Submit delivery rating (Customer only)
 router.post(
   '/',
   authMiddleware,
   roleMiddleware.requireRole('customer'),
+  ratingSubmissionLimiter,
   deliveryRatingController.submitDeliveryRating
 );
 

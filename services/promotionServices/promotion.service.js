@@ -1,4 +1,5 @@
 const supabase = require('../../config/supabase');
+const cache = require('../../utils/cache');
 
 /**
  * Promotion Service
@@ -101,6 +102,14 @@ class PromotionService {
    */
   async getActivePromotions(productId) {
     try {
+      // Check cache first (1-minute TTL)
+      const cacheKey = `active_promotions_${productId}`;
+      let promotions = cache.get(cacheKey, 'short');
+      
+      if (promotions) {
+        return promotions;
+      }
+      
       const now = new Date().toISOString();
       
       const { data, error } = await supabase
@@ -113,7 +122,13 @@ class PromotionService {
         .order('promotional_price', { ascending: true });
 
       if (error) throw error;
-      return data || [];
+      
+      promotions = data || [];
+      
+      // Cache for 1 minute
+      cache.set(cacheKey, promotions, 'short');
+      
+      return promotions;
     } catch (error) {
       console.error('Error getting active promotions:', error);
       throw error;

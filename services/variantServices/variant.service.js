@@ -9,6 +9,7 @@
 
 const supabase = require('../../config/supabase');
 const crypto = require('crypto');
+const cache = require('../../utils/cache');
 
 /**
  * Generate unique SKU for variant
@@ -176,6 +177,14 @@ async function createVariant(productId, variantData) {
  * @returns {Promise<Array>} Array of variant objects with inventory
  */
 async function getProductVariants(productId, filters = {}) {
+  // Check cache first (10-minute TTL)
+  const cacheKey = `variants_${productId}_${JSON.stringify(filters)}`;
+  let variants = cache.get(cacheKey, 'medium');
+  
+  if (variants) {
+    return variants;
+  }
+  
   let query = supabase
     .from('product_variants')
     .select(`
@@ -195,7 +204,7 @@ async function getProductVariants(productId, filters = {}) {
   
   if (error) throw error;
   
-  let variants = data || [];
+  variants = data || [];
   
   // Filter by attributes if specified
   if (filters.attributes && Object.keys(filters.attributes).length > 0) {
@@ -216,6 +225,9 @@ async function getProductVariants(productId, filters = {}) {
       availableQuantity: inv ? (inv.quantity - inv.reserved_quantity) : 0
     };
   });
+  
+  // Cache for 10 minutes
+  cache.set(cacheKey, variants, 'medium');
   
   return variants;
 }

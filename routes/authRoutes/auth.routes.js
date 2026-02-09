@@ -17,6 +17,7 @@ const {
   validateProfileUpdate,
   sanitizeInput
 } = require('../../middlewares/validation.middleware');
+const { loginAttemptLimiter } = require('../../middlewares/rateLimiter.middleware');
 
 // Public routes (with validation)
 router.post(
@@ -35,6 +36,7 @@ router.post(
 
 router.post(
   '/api/auth/login',
+  loginAttemptLimiter,
   sanitizeInput,
   validateLogin,
   authController.login

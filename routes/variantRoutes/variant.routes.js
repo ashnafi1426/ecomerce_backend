@@ -10,6 +10,7 @@ const router = express.Router();
 const variantController = require('../../controllers/variantControllers/variant.controller');
 const authenticate = require('../../middlewares/auth.middleware');
 const { requireRole } = require('../../middlewares/role.middleware');
+const { variantCreationLimiter } = require('../../middlewares/rateLimiter.middleware');
 
 // ============================================================================
 // VARIANT CREATION AND MANAGEMENT
@@ -25,6 +26,7 @@ router.post(
   '/',
   authenticate,
   requireRole(['seller', 'manager', 'admin']),
+  variantCreationLimiter,
   variantController.createVariant
 );
 

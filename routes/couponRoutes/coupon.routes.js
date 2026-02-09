@@ -3,6 +3,7 @@ const router = express.Router();
 const couponController = require('../../controllers/couponControllers/coupon.controller');
 const authMiddleware = require('../../middlewares/auth.middleware');
 const roleMiddleware = require('../../middlewares/role.middleware');
+const { couponApplicationLimiter } = require('../../middlewares/rateLimiter.middleware');
 
 /**
  * Coupon Routes
@@ -24,7 +25,7 @@ router.post('/validate', couponController.validateCoupon);
  * @desc    Apply a coupon to an order
  * @access  Customer
  */
-router.post('/apply', couponController.applyCoupon);
+router.post('/apply', couponApplicationLimiter, couponController.applyCoupon);
 
 /**
  * @route   GET /api/v1/coupons/active
