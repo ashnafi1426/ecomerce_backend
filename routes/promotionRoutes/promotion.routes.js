@@ -1,16 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const promotionController = require('../../controllers/promotionControllers/promotion.controller');
-const authMiddleware = require('../../middlewares/auth.middleware');
-const roleMiddleware = require('../../middlewares/role.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
+const { requireAnyRole } = require('../../middlewares/role.middleware');
 
 /**
  * Promotion Routes
  * Implements Requirements 2.11, 2.12
  */
-
-// Public routes (require authentication)
-router.use(authMiddleware);
 
 /**
  * @route   GET /api/v1/promotions/active
@@ -18,7 +15,7 @@ router.use(authMiddleware);
  * @access  Public (authenticated)
  * @query   productId or variantId
  */
-router.get('/active', promotionController.getActivePromotions);
+router.get('/active', authenticate, promotionController.getActivePromotions);
 
 /**
  * @route   GET /api/v1/promotions/price
@@ -26,21 +23,21 @@ router.get('/active', promotionController.getActivePromotions);
  * @access  Public (authenticated)
  * @query   productId or variantId, originalPrice
  */
-router.get('/price', promotionController.getPromotionalPrice);
+router.get('/price', authenticate, promotionController.getPromotionalPrice);
 
 /**
  * @route   GET /api/v1/promotions/products-with-promotions
  * @desc    Get products with active promotions
  * @access  Public (authenticated)
  */
-router.get('/products-with-promotions', promotionController.getProductsWithPromotions);
+router.get('/products-with-promotions', authenticate, promotionController.getProductsWithPromotions);
 
 /**
  * @route   GET /api/v1/promotions/product/:productId
  * @desc    Get all promotions for a product
  * @access  Public (authenticated)
  */
-router.get('/product/:productId', promotionController.getPromotionsByProduct);
+router.get('/product/:productId', authenticate, promotionController.getPromotionsByProduct);
 
 // Manager-only routes
 /**
@@ -50,7 +47,8 @@ router.get('/product/:productId', promotionController.getPromotionsByProduct);
  */
 router.post(
   '/',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.createPromotion
 );
 
@@ -61,7 +59,8 @@ router.post(
  */
 router.post(
   '/bulk',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.bulkCreatePromotions
 );
 
@@ -72,7 +71,8 @@ router.post(
  */
 router.post(
   '/process-scheduled',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.processScheduledPromotions
 );
 
@@ -83,7 +83,8 @@ router.post(
  */
 router.get(
   '/',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.getAllPromotions
 );
 
@@ -94,7 +95,8 @@ router.get(
  */
 router.get(
   '/:id',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.getPromotionById
 );
 
@@ -105,7 +107,8 @@ router.get(
  */
 router.get(
   '/:id/analytics',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.getPromotionAnalytics
 );
 
@@ -116,7 +119,8 @@ router.get(
  */
 router.put(
   '/:id',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.updatePromotion
 );
 
@@ -127,7 +131,8 @@ router.put(
  */
 router.delete(
   '/:id',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   promotionController.deletePromotion
 );
 

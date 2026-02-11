@@ -42,7 +42,7 @@ const createOrder = async (req, res, next) => {
 };
 
 /**
- * Get customer's orders
+ * Get customer's orders (AMAZON-STYLE: CLEAN ORDER LIST)
  * GET /api/orders
  */
 const getMyOrders = async (req, res, next) => {
@@ -54,7 +54,10 @@ const getMyOrders = async (req, res, next) => {
       limit: limit ? parseInt(limit) : undefined
     });
 
-    res.json(orders);
+    res.json({
+      success: true,
+      orders: orders
+    });
   } catch (error) {
     next(error);
   }

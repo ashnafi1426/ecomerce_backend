@@ -147,5 +147,7 @@ const optionalAuthenticate = async (req, res, next) => {
   }
 };
 
-module.exports = authenticate;
-module.exports.optionalAuthenticate = optionalAuthenticate;
+module.exports = {
+  authenticate,
+  optionalAuthenticate
+};

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const replacementController = require('../../controllers/replacementControllers/replacement.controller');
-const authMiddleware = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const roleMiddleware = require('../../middlewares/role.middleware');
 
 /**
@@ -16,7 +16,7 @@ const roleMiddleware = require('../../middlewares/role.middleware');
  */
 router.post(
   '/',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireRole('customer'),
   replacementController.createReplacementRequest
 );
@@ -28,7 +28,7 @@ router.post(
  */
 router.get(
   '/',
-  authMiddleware,
+  authenticate,
   replacementController.getReplacementRequests
 );
 
@@ -39,7 +39,7 @@ router.get(
  */
 router.get(
   '/analytics',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireAnyRole(['manager', 'admin']),
   replacementController.getReplacementAnalytics
 );
@@ -51,7 +51,7 @@ router.get(
  */
 router.get(
   '/:id',
-  authMiddleware,
+  authenticate,
   replacementController.getReplacementRequest
 );
 
@@ -62,7 +62,7 @@ router.get(
  */
 router.put(
   '/:id/approve',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireAnyRole(['manager', 'admin']),
   replacementController.approveReplacement
 );
@@ -74,7 +74,7 @@ router.put(
  */
 router.put(
   '/:id/reject',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireAnyRole(['manager', 'admin']),
   replacementController.rejectReplacement
 );
@@ -86,7 +86,7 @@ router.put(
  */
 router.put(
   '/:id/shipment',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireRole('seller'),
   replacementController.updateReplacementShipment
 );
@@ -98,7 +98,7 @@ router.put(
  */
 router.put(
   '/:id/return-tracking',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireRole('customer'),
   replacementController.updateReturnTracking
 );
@@ -110,7 +110,7 @@ router.put(
  */
 router.put(
   '/:id/confirm-return',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireRole('seller'),
   replacementController.confirmReturnReceived
 );

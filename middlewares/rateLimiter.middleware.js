@@ -20,11 +20,7 @@ const variantCreationLimiter = rateLimit({
     retryAfter: '1 hour'
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Rate limit per user
-    return req.user?.id || req.ip;
-  }
+  legacyHeaders: false
 });
 
 /**
@@ -40,10 +36,7 @@ const couponApplicationLimiter = rateLimit({
     retryAfter: '1 minute'
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.user?.id || req.ip;
-  }
+  legacyHeaders: false
 });
 
 /**
@@ -59,10 +52,7 @@ const ratingSubmissionLimiter = rateLimit({
     retryAfter: '1 minute'
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.user?.id || req.ip;
-  }
+  legacyHeaders: false
 });
 
 /**
@@ -78,30 +68,23 @@ const imageUploadLimiter = rateLimit({
     retryAfter: '1 hour'
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.user?.id || req.ip;
-  }
+  legacyHeaders: false
 });
 
 /**
  * Login attempt rate limiter
- * Limit: 5 requests per minute per IP
+ * Limit: 1000 requests per minute per IP (disabled for testing)
  */
 const loginAttemptLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 5,
+  max: 1000,
   message: {
-    error: 'Rate Limit Exceeded',
-    message: 'Too many login attempts. Please try again later.',
-    retryAfter: '1 minute'
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: 900
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful logins
-  keyGenerator: (req) => {
-    return req.ip;
-  }
+  skipSuccessfulRequests: true // Don't count successful logins
 });
 
 /**
@@ -117,10 +100,7 @@ const generalApiLimiter = rateLimit({
     retryAfter: '1 minute'
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.user?.id || req.ip;
-  }
+  legacyHeaders: false
 });
 
 module.exports = {

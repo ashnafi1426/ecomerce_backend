@@ -36,10 +36,10 @@ const findById = async (id) => {
 };
 
 /**
- * Find orders by user ID
+ * Find orders by user ID (AMAZON-STYLE: ONE ORDER = ONE ROW)
  * @param {String} userId - User UUID
  * @param {Object} filters - Filter options
- * @returns {Promise<Array>} Array of order objects
+ * @returns {Promise<Array>} Array of order objects with items from basket
  */
 const findByUserId = async (userId, filters = {}) => {
   let query = supabase
@@ -60,7 +60,45 @@ const findByUserId = async (userId, filters = {}) => {
   
   if (error) throw error;
   
-  return data || [];
+  // Transform basket to items array for frontend compatibility
+  const orders = await Promise.all((data || []).map(async (order) => {
+    // Get basket items - handle both array and object formats
+    let basketItems = [];
+    if (Array.isArray(order.basket)) {
+      basketItems = order.basket;
+    } else if (order.basket && order.basket.items) {
+      basketItems = order.basket.items;
+    } else if (order.order_items) {
+      basketItems = order.order_items;
+    }
+    
+    // Fetch product details for each item
+    const itemsWithDetails = await Promise.all(basketItems.map(async (item) => {
+      const { data: product } = await supabase
+        .from('products')
+        .select('id, title, image_url, price')
+        .eq('id', item.product_id)
+        .single();
+      
+      return {
+        ...item,
+        product: product || {
+          id: item.product_id,
+          name: item.title,
+          image: item.image_url || null,
+          price: item.price
+        }
+      };
+    }));
+    
+    return {
+      ...order,
+      items: itemsWithDetails,
+      total: order.amount / 100 // Convert cents to dollars
+    };
+  }));
+  
+  return orders;
 };
 
 /**

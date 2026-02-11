@@ -11,7 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../../controllers/userControllers/user.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin, requireAnyRole } = require('../../middlewares/role.middleware');
 
 // ============================================

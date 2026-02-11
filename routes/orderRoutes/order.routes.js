@@ -7,7 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../../controllers/orderControllers/order.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireCustomer, requireAdmin } = require('../../middlewares/role.middleware');
 
 // ============================================

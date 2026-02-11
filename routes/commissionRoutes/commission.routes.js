@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const commissionController = require('../../controllers/commissionControllers/commission.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
 // All commission rate endpoints are admin-only

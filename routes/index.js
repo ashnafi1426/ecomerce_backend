@@ -12,7 +12,6 @@ const productRouter = require('./productRoutes/product.routes');
 const orderRouter = require('./orderRoutes/order.routes');
 const adminRouter = require('./adminRoutes/admin.routes');
 const categoryRouter = require('./categoryRoutes/category.routes');
-const inventoryRouter = require('./inventoryRoutes/inventory.routes');
 const returnRouter = require('./returnRoutes/return.routes');
 const addressRouter = require('./addressRoutes/address.routes');
 const auditLogRouter = require('./auditLogRoutes/auditLog.routes');
@@ -46,14 +45,22 @@ const replacementRouter = require('./replacementRoutes/replacement.routes');
 // Enhanced Refund Process System
 const refundRouter = require('./refundRoutes/enhancedRefund.routes');
 
+// Guest Checkout System (Amazon-style)
+const guestRouter = require('./guestRoutes/guest.routes');
+
+// Enhanced Inventory Management System (Amazon-style)
+const inventoryEnhancedRouter = require('./inventoryRoutes/inventory.routes');
+
+// Amazon-style Product Approval Workflow
+const approvalRouter = require('./approvalRoutes/approval.routes');
+
 // Add routes to the main router
 router.use(authRouter);
 router.use(userRouter);
 router.use(productRouter);
 router.use(orderRouter);
-router.use(adminRouter);
+router.use('/api/admin', adminRouter); // Mount admin routes with prefix
 router.use(categoryRouter);
-router.use(inventoryRouter);
 router.use(returnRouter);
 router.use(addressRouter);
 router.use(auditLogRouter);
@@ -86,6 +93,15 @@ router.use('/api/replacements', replacementRouter);
 
 // Enhanced Refund Process System
 router.use('/api/refunds', refundRouter);
+
+// Guest Checkout System (Amazon-style)
+router.use('/api/guest', guestRouter);
+
+// Enhanced Inventory Management System (Amazon-style)
+router.use('/api/inventory', inventoryEnhancedRouter);
+
+// Amazon-style Product Approval Workflow
+router.use('/api/approvals', approvalRouter);
 
 // Export the router
 module.exports = router;

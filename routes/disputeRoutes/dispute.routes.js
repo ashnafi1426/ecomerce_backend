@@ -7,7 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const disputeController = require('../../controllers/disputeControllers/dispute.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
 // Customer/Seller dispute routes

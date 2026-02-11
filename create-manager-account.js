@@ -1,85 +1,101 @@
 /**
- * CREATE MANAGER ACCOUNT
- * Creates a manager account for testing
+ * CREATE MANAGER TEST ACCOUNT
+ * 
+ * Creates a manager account for testing the manager portal
  */
 
-const supabase = require('./config/supabase');
-const { hashPassword } = require('./utils/hash');
+const bcrypt = require('bcrypt');
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
 
-async function createManager() {
-  console.log('\n🔧 Creating Manager Account...\n');
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-  const managerData = {
-    email: 'manager@test.com',
-    password: 'Manager123!@#',
-    displayName: 'Test Manager'
-  };
-
+async function createManagerAccount() {
   try {
+    console.log('🔐 Creating manager test account...\n');
+
+    // Manager credentials
+    const email = 'manager@fastshop.com';
+    const password = 'Manager123!@#';
+    const displayName = 'Test Manager';
+
+    // Hash the password
+    const passwordHash = await bcrypt.hash(password, 10);
+    console.log('✅ Password hashed');
+
     // Check if manager already exists
-    const { data: existing } = await supabase
+    const { data: existingUser } = await supabase
       .from('users')
-      .select('id, email')
-      .eq('email', managerData.email)
+      .select('id, email, role')
+      .eq('email', email)
       .single();
-    
-    if (existing) {
-      console.log('⚠️  Manager account already exists!');
-      console.log('   Email:', existing.email);
-      console.log('\n✅ You can login with:');
-      console.log('   Email:', managerData.email);
-      console.log('   Password:', managerData.password);
-      console.log('');
+
+    if (existingUser) {
+      console.log(`\n⚠️ Manager account already exists:`);
+      console.log(`   Email: ${existingUser.email}`);
+      console.log(`   Role: ${existingUser.role}`);
+      console.log(`   ID: ${existingUser.id}`);
+
+      // Update to manager role if not already
+      if (existingUser.role !== 'manager') {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ role: 'manager' })
+          .eq('id', existingUser.id);
+
+        if (updateError) {
+          console.error('❌ Error updating role:', updateError.message);
+        } else {
+          console.log('✅ Updated role to manager');
+        }
+      }
+
+      console.log(`\n✅ Manager account ready!`);
+      console.log(`\n📝 Login Credentials:`);
+      console.log(`   Email: ${email}`);
+      console.log(`   Password: ${password}`);
       return;
     }
 
-    // Hash password
-    console.log('🔐 Hashing password...');
-    const passwordHash = await hashPassword(managerData.password);
-
-    // Create manager
-    console.log('👤 Creating manager account...');
-    const { data: manager, error } = await supabase
+    // Create new manager account
+    const { data: newUser, error: insertError } = await supabase
       .from('users')
-      .insert([{
-        email: managerData.email,
+      .insert({
+        email,
         password_hash: passwordHash,
         role: 'manager',
-        display_name: managerData.displayName,
-        status: 'active'
-      }])
+        display_name: displayName,
+        is_active: true,
+        email_verified: true
+      })
       .select()
       .single();
-    
-    if (error) {
-      console.log('❌ Error creating manager:', error.message);
-      return;
+
+    if (insertError) {
+      throw insertError;
     }
 
-    console.log('✅ Manager account created successfully!\n');
-    console.log('📋 Manager Details:');
-    console.log('   ID:', manager.id);
-    console.log('   Email:', manager.email);
-    console.log('   Name:', manager.display_name);
-    console.log('   Role:', manager.role);
-    console.log('   Status:', manager.status);
-    console.log('');
-    console.log('🔑 Login Credentials:');
-    console.log('   Email:', managerData.email);
-    console.log('   Password:', managerData.password);
-    console.log('');
-    console.log('📝 Use these credentials in Postman:');
-    console.log('   POST http://localhost:5000/api/auth/login');
-    console.log('   Body:');
-    console.log('   {');
-    console.log(`     "email": "${managerData.email}",`);
-    console.log(`     "password": "${managerData.password}"`);
-    console.log('   }');
-    console.log('');
+    console.log(`\n✅ Manager account created successfully!`);
+    console.log(`\n📝 Account Details:`);
+    console.log(`   Email: ${email}`);
+    console.log(`   Password: ${password}`);
+    console.log(`   Display Name: ${displayName}`);
+    console.log(`   Role: manager`);
+    console.log(`   ID: ${newUser.id}`);
+
+    console.log(`\n🚀 You can now login at:`);
+    console.log(`   http://localhost:5173/login`);
+    console.log(`\n   After login, you'll be redirected to:`);
+    console.log(`   http://localhost:5173/manager/dashboard`);
 
   } catch (error) {
-    console.error('\n❌ Error:', error.message);
+    console.error('❌ Error creating manager account:', error.message);
+    process.exit(1);
   }
 }
 
-createManager();
+// Run the script
+createManagerAccount();

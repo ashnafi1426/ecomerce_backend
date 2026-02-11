@@ -8,7 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const analyticsController = require('../../controllers/analyticsControllers/analytics.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
 // ============================================

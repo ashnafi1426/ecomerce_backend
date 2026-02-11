@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const enhancedRefundController = require('../../controllers/refundControllers/enhancedRefund.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireRole, requireAnyRole } = require('../../middlewares/role.middleware');
 
 /**

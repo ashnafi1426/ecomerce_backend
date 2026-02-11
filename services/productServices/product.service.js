@@ -277,8 +277,7 @@ const getLowStock = async (sellerId = null) => {
       inventory(quantity, low_stock_threshold),
       seller:users!products_seller_id_fkey(id, display_name, business_name)
     `)
-    .eq('status', 'active')
-    .order('inventory.quantity', { ascending: true });
+    .eq('status', 'active');
 
   if (sellerId) {
     query = query.eq('seller_id', sellerId);
@@ -289,9 +288,13 @@ const getLowStock = async (sellerId = null) => {
   if (error) throw error;
   
   const lowStockProducts = (data || []).filter(product => {
-    if (!product.inventory || product.inventory.length === 0) return false;
-    const inv = product.inventory[0];
-    return inv.quantity <= inv.low_stock_threshold;
+    // Handle both array and object inventory
+    const inv = Array.isArray(product.inventory) 
+      ? product.inventory[0] 
+      : product.inventory;
+    
+    if (!inv || typeof inv.quantity === 'undefined') return false;
+    return inv.quantity <= (inv.low_stock_threshold || 10);
   });
   
   return lowStockProducts;

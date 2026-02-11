@@ -7,30 +7,30 @@
 const express = require('express');
 const router = express.Router();
 const returnController = require('../../controllers/returnControllers/return.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
 // ============================================
 // CUSTOMER ROUTES (Authenticated)
 // ============================================
 
-// Get user's returns
+// Get user's returns (must come before /api/returns to avoid conflict)
 router.get('/api/returns/user/me', authenticate, returnController.getMyReturns);
 
-// Get return by ID
-router.get('/api/returns/:id', authenticate, returnController.getReturnById);
-
-// Get returns by order ID
+// Get returns by order ID (must come before /api/returns/:id)
 router.get('/api/returns/order/:orderId', authenticate, returnController.getReturnsByOrder);
 
 // Create return request
 router.post('/api/returns', authenticate, returnController.createReturn);
 
+// Get return by ID
+router.get('/api/returns/:id', authenticate, returnController.getReturnById);
+
 // ============================================
 // ADMIN ROUTES
 // ============================================
 
-// Get all returns
+// Get all returns (admin only - comes after specific routes)
 router.get('/api/returns', authenticate, requireAdmin, returnController.getAllReturns);
 
 // Get recent returns

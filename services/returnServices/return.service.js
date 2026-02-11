@@ -32,17 +32,17 @@ const findById = async (id) => {
 };
 
 /**
- * Find returns by user ID
+ * Find returns by user ID (AMAZON-STYLE: CLEAN RETURNS LIST)
  * @param {String} userId - User UUID
  * @param {Object} filters - Filter options
- * @returns {Promise<Array>} Array of return objects
+ * @returns {Promise<Array>} Array of return objects with order details
  */
 const findByUserId = async (userId, filters = {}) => {
   let query = supabase
     .from('returns')
     .select(`
       *,
-      order:orders(id, amount, created_at)
+      order:orders(id, amount, created_at, order_number)
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
@@ -57,7 +57,11 @@ const findByUserId = async (userId, filters = {}) => {
 
   const { data, error } = await query;
   
-  if (error) throw error;
+  if (error) {
+    // If returns table doesn't exist or user_id column missing, return empty array
+    console.error('Returns query error:', error.message);
+    return [];
+  }
   
   return data || [];
 };

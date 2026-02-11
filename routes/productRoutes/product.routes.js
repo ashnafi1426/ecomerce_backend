@@ -8,8 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('../../controllers/productControllers/product.controller');
-const authenticate = require('../../middlewares/auth.middleware');
-const { optionalAuthenticate } = require('../../middlewares/auth.middleware');
+const { authenticate, optionalAuthenticate } = require('../../middlewares/auth.middleware');
 const { requireSeller, requireManager, requireMinRole } = require('../../middlewares/role.middleware');
 
 // ============================================

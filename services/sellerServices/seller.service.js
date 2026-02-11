@@ -365,11 +365,19 @@ const getDashboardStats = async (sellerId) => {
     .eq('seller_id', sellerId)
     .single();
   
-  // Get product count
+  // Get product count (active products)
   const { count: productCount } = await supabase
     .from('products')
     .select('*', { count: 'exact', head: true })
-    .eq('seller_id', sellerId);
+    .eq('seller_id', sellerId)
+    .eq('status', 'active');
+  
+  // Get pending products count
+  const { count: pendingProducts } = await supabase
+    .from('products')
+    .select('*', { count: 'exact', head: true })
+    .eq('seller_id', sellerId)
+    .eq('status', 'pending');
   
   // Get pending orders count
   const { count: pendingOrders } = await supabase
@@ -380,8 +388,9 @@ const getDashboardStats = async (sellerId) => {
   
   return {
     performance,
-    balance: balance || { available_balance: 0, pending_balance: 0, escrow_balance: 0 },
+    balance: balance || { available_balance: 0, pending_balance: 0, escrow_balance: 0, total_earnings: 0 },
     productCount: productCount || 0,
+    pendingProducts: pendingProducts || 0,
     pendingOrders: pendingOrders || 0
   };
 };

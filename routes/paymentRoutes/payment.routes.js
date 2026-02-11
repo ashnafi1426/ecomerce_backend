@@ -1,45 +1,48 @@
-
 const express = require('express');
 const router = express.Router();
-const paymentController = require('../../controllers/paymentControllers/payment.controller');
-const authenticate = require('../../middlewares/auth.middleware');
-const { requireCustomer, requireAdmin } = require('../../middlewares/role.middleware');
+const { authenticate, optionalAuthenticate } = require('../../middlewares/auth.middleware');
 
-// ============================================
-// WEBHOOK ROUTE (Must be BEFORE other routes - uses raw body)
-// ============================================
+// Import payment controller functions
+// Note: These are ES6 modules, so we need to use dynamic import
+let paymentController;
 
-// Stripe webhook endpoint (No authentication - Stripe signature verification)
-// Note: This route needs raw body, handled in app.js
-router.post('/api/payments/webhook', paymentController.handleWebhook);
+// Load the ES6 module controller
+(async () => {
+  paymentController = await import('../../controllers/paymentControllers/payment.controller.js');
+})();
 
-// ============================================
-// CUSTOMER ROUTES
-// ============================================
+// Create payment intent (can be guest or authenticated)
+// Use optionalAuthenticate to attach user if logged in, but allow guests
+router.post('/api/payments/create-intent', optionalAuthenticate, async (req, res) => {
+  if (!paymentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return paymentController.createPaymentIntent(req, res);
+});
 
-// Create payment intent for order
-router.post('/api/payments/create-intent', authenticate, requireCustomer, paymentController.createPaymentIntent);
+// Create order after payment success (no webhooks)
+// Use optionalAuthenticate to attach user if logged in, but allow guests
+router.post('/api/payments/create-order', optionalAuthenticate, async (req, res) => {
+  if (!paymentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return paymentController.createOrderAfterPayment(req, res);
+});
 
-// Get payment by order ID
-router.get('/api/payments/order/:orderId', authenticate, requireCustomer, paymentController.getPaymentByOrder);
+// Get payment status
+router.get('/api/payments/:paymentIntentId', async (req, res) => {
+  if (!paymentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return paymentController.getPaymentStatus(req, res);
+});
 
-// Get payment by ID
-router.get('/api/payments/:id', authenticate, paymentController.getPaymentById);
-
-// ============================================
-// ADMIN ROUTES
-// ============================================
-
-// Get all payments
-router.get('/api/admin/payments', authenticate, requireAdmin, paymentController.getAllPayments);
-
-// Get payment statistics
-router.get('/api/admin/payments/statistics', authenticate, requireAdmin, paymentController.getStatistics);
-
-// Process refund
-router.post('/api/admin/payments/:id/refund', authenticate, requireAdmin, paymentController.processRefund);
-
-// Sync payment status manually
-router.post('/api/admin/payments/:paymentIntentId/sync', authenticate, requireAdmin, paymentController.syncPaymentStatus);
+// Cancel payment (requires authentication)
+router.post('/api/payments/:paymentIntentId/cancel', authenticate, async (req, res) => {
+  if (!paymentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return paymentController.cancelPayment(req, res);
+});
 
 module.exports = router;

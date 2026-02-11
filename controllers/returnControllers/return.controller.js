@@ -54,7 +54,7 @@ const getReturnById = async (req, res, next) => {
 };
 
 /**
- * Get user's returns
+ * Get user's returns (AMAZON-STYLE: CLEAN RETURNS LIST)
  * GET /api/returns/user/me
  */
 const getMyReturns = async (req, res, next) => {
@@ -64,7 +64,10 @@ const getMyReturns = async (req, res, next) => {
       status,
       limit: limit ? parseInt(limit) : undefined
     });
-    res.json(returns);
+    res.json({
+      success: true,
+      returns: returns
+    });
   } catch (error) {
     next(error);
   }

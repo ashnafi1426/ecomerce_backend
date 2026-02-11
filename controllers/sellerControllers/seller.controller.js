@@ -208,9 +208,11 @@ const getDashboardStats = async (req, res, next) => {
     
     const stats = await sellerService.getDashboardStats(sellerId);
     
+    // Return data directly (not wrapped in stats object)
+    // API interceptor will extract response.data
     res.status(200).json({
       success: true,
-      stats
+      data: stats
     });
   } catch (error) {
     next(error);

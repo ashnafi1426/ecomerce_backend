@@ -1,64 +1,45 @@
+const express = require('express');
+const {
+  reserveInventory,
+  releaseReservation,
+  checkAvailability,
+  getInventoryStatus,
+  expireOldReservations,
+  getActiveReservations
+} = require('../../controllers/inventoryControllers/inventory.controller.js');
+const { authenticate, optionalAuthenticate } = require('../../middlewares/auth.middleware.js');
+const { requireRole, requireAnyRole } = require('../../middlewares/role.middleware.js');
+
+const router = express.Router();
+
 /**
- * INVENTORY ROUTES
- * 
- * Routes for inventory/stock management operations.
+ * Public Routes
  */
 
-const express = require('express');
-const router = express.Router();
-const inventoryController = require('../../controllers/inventoryControllers/inventory.controller');
-const authenticate = require('../../middlewares/auth.middleware');
-const { requireAdmin } = require('../../middlewares/role.middleware');
+// Check product availability (public)
+router.get('/check/:productId', checkAvailability);
 
-// ============================================
-// PUBLIC ROUTES (Read-only)
-// ============================================
+/**
+ * Authenticated Routes (Customer)
+ */
 
-// Get available quantity for product
-router.get('/api/inventory/product/:productId/available', inventoryController.getAvailableQuantity);
+// Reserve inventory during checkout
+router.post('/reserve', optionalAuthenticate, reserveInventory);
 
-// Check if product has sufficient stock
-router.get('/api/inventory/product/:productId/check', inventoryController.checkStock);
+// Release reservation
+router.post('/release/:reservationId', optionalAuthenticate, releaseReservation);
 
-// ============================================
-// ADMIN ROUTES
-// ============================================
+/**
+ * Admin/Manager Routes
+ */
 
-// Get all inventory records
-router.get('/api/inventory', authenticate, requireAdmin, inventoryController.getAllInventory);
+// Get inventory status
+router.get('/status', authenticate, requireAnyRole(['admin', 'manager']), getInventoryStatus);
 
-// Get inventory by product ID
-router.get('/api/inventory/product/:productId', authenticate, requireAdmin, inventoryController.getInventoryByProduct);
+// Get active reservations
+router.get('/reservations', authenticate, requireAnyRole(['admin', 'manager']), getActiveReservations);
 
-// Get low stock products
-router.get('/api/inventory/low-stock', authenticate, requireAdmin, inventoryController.getLowStock);
-
-// Get out of stock products
-router.get('/api/inventory/out-of-stock', authenticate, requireAdmin, inventoryController.getOutOfStock);
-
-// Create inventory record
-router.post('/api/inventory', authenticate, requireAdmin, inventoryController.createInventory);
-
-// Update inventory quantity
-router.put('/api/inventory/product/:productId/quantity', authenticate, requireAdmin, inventoryController.updateQuantity);
-
-// Adjust inventory quantity (add/subtract)
-router.patch('/api/inventory/product/:productId/adjust', authenticate, requireAdmin, inventoryController.adjustQuantity);
-
-// Update low stock threshold
-router.patch('/api/inventory/product/:productId/threshold', authenticate, requireAdmin, inventoryController.updateThreshold);
-
-// ============================================
-// INTERNAL ROUTES (Admin only - for order processing)
-// ============================================
-
-// Reserve inventory
-router.post('/api/inventory/product/:productId/reserve', authenticate, requireAdmin, inventoryController.reserveInventory);
-
-// Release reserved inventory
-router.post('/api/inventory/product/:productId/release', authenticate, requireAdmin, inventoryController.releaseInventory);
-
-// Fulfill reserved inventory
-router.post('/api/inventory/product/:productId/fulfill', authenticate, requireAdmin, inventoryController.fulfillInventory);
+// Expire old reservations (cron job endpoint)
+router.post('/expire-reservations', authenticate, requireRole('admin'), expireOldReservations);
 
 module.exports = router;

@@ -8,32 +8,69 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../../controllers/adminControllers/admin.controller');
-const authenticate = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
 // All admin routes require authentication and admin role
 // Dashboard
-router.get('/api/admin/dashboard', authenticate, requireAdmin, adminController.getDashboard);
+router.get('/dashboard', authenticate, requireAdmin, adminController.getDashboard);
+router.get('/dashboard/stats', authenticate, requireAdmin, adminController.getDashboard);
 
-// Product Management
-router.post('/api/admin/products', authenticate, requireAdmin, adminController.createProduct);
-router.put('/api/admin/products/:id', authenticate, requireAdmin, adminController.updateProduct);
-router.delete('/api/admin/products/:id', authenticate, requireAdmin, adminController.deleteProduct);
-router.put('/api/admin/products/:id/inventory', authenticate, requireAdmin, adminController.updateInventory);
-router.get('/api/admin/products/low-stock', authenticate, requireAdmin, adminController.getLowStockProducts);
+// Product Management - IMPORTANT: Specific routes MUST come before generic routes
+router.get('/products/pending', authenticate, requireAdmin, adminController.getPendingProducts);
+router.get('/products/low-stock', authenticate, requireAdmin, adminController.getLowStockProducts);
+router.get('/products', authenticate, requireAdmin, adminController.getAllProducts);
+router.post('/products', authenticate, requireAdmin, adminController.createProduct);
+router.put('/products/:id', authenticate, requireAdmin, adminController.updateProduct);
+router.delete('/products/:id', authenticate, requireAdmin, adminController.deleteProduct);
+router.put('/products/:id/inventory', authenticate, requireAdmin, adminController.updateInventory);
+
+// Product Approvals
+router.post('/products/:id/approve', authenticate, requireAdmin, adminController.approveProduct);
+router.post('/products/:id/reject', authenticate, requireAdmin, adminController.rejectProduct);
 
 // Order Management
-router.get('/api/admin/orders', authenticate, requireAdmin, adminController.getAllOrders);
-router.put('/api/admin/orders/:id/status', authenticate, requireAdmin, adminController.updateOrderStatus);
-router.get('/api/admin/orders/statistics', authenticate, requireAdmin, adminController.getOrderStatistics);
+router.get('/orders', authenticate, requireAdmin, adminController.getAllOrders);
+router.put('/orders/:id/status', authenticate, requireAdmin, adminController.updateOrderStatus);
+router.get('/orders/statistics', authenticate, requireAdmin, adminController.getOrderStatistics);
 
 // User Management
-router.get('/api/admin/users', authenticate, requireAdmin, adminController.getAllUsers);
-router.put('/api/admin/users/:id/status', authenticate, requireAdmin, adminController.updateUserStatus);
+router.get('/users', authenticate, requireAdmin, adminController.getAllUsers);
+router.put('/users/:id/status', authenticate, requireAdmin, adminController.updateUserStatus);
+
+// Seller Management
+router.get('/sellers', authenticate, requireAdmin, adminController.getAllSellers);
+
+// Manager Management
+router.get('/managers', authenticate, requireAdmin, adminController.getAllManagers);
+
+// Customer Management
+router.get('/customers', authenticate, requireAdmin, adminController.getAllCustomers);
+
+// Category Management
+router.get('/categories', authenticate, requireAdmin, adminController.getAllCategories);
+router.post('/categories', authenticate, requireAdmin, adminController.createCategory);
+router.put('/categories/:id', authenticate, requireAdmin, adminController.updateCategory);
+router.delete('/categories/:id', authenticate, requireAdmin, adminController.deleteCategory);
+
+// Audit Logs
+router.get('/logs', authenticate, requireAdmin, adminController.getAuditLogs);
+
+// Refunds
+router.get('/refunds', authenticate, requireAdmin, adminController.getAllRefunds);
+router.post('/refunds/:id/approve', authenticate, requireAdmin, adminController.approveRefund);
+router.post('/refunds/:id/reject', authenticate, requireAdmin, adminController.rejectRefund);
 
 // Payment Management
-router.get('/api/admin/payments', authenticate, requireAdmin, adminController.getAllPayments);
-router.post('/api/admin/payments/:id/refund', authenticate, requireAdmin, adminController.processRefund);
-router.get('/api/admin/payments/statistics', authenticate, requireAdmin, adminController.getPaymentStatistics);
+router.get('/payments', authenticate, requireAdmin, adminController.getAllPayments);
+router.post('/payments/:id/refund', authenticate, requireAdmin, adminController.processRefund);
+router.get('/payments/statistics', authenticate, requireAdmin, adminController.getPaymentStatistics);
+
+// Revenue Analytics
+router.get('/revenue', authenticate, requireAdmin, adminController.getRevenueAnalytics);
+
+// Settings
+router.get('/settings', authenticate, requireAdmin, adminController.getSettings);
+router.put('/settings', authenticate, requireAdmin, adminController.updateSettings);
 
 module.exports = router;

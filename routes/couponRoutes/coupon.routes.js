@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const couponController = require('../../controllers/couponControllers/coupon.controller');
-const authMiddleware = require('../../middlewares/auth.middleware');
-const roleMiddleware = require('../../middlewares/role.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
+const { requireAnyRole } = require('../../middlewares/role.middleware');
 const { couponApplicationLimiter } = require('../../middlewares/rateLimiter.middleware');
 
 /**
@@ -10,43 +10,40 @@ const { couponApplicationLimiter } = require('../../middlewares/rateLimiter.midd
  * Implements Requirements 2.1, 2.7, 2.11, 2.17
  */
 
-// Public routes (require authentication)
-router.use(authMiddleware);
-
 /**
  * @route   POST /api/v1/coupons/validate
  * @desc    Validate a coupon code
  * @access  Customer
  */
-router.post('/validate', couponController.validateCoupon);
+router.post('/validate', authenticate, couponController.validateCoupon);
 
 /**
  * @route   POST /api/v1/coupons/apply
  * @desc    Apply a coupon to an order
  * @access  Customer
  */
-router.post('/apply', couponApplicationLimiter, couponController.applyCoupon);
+router.post('/apply', authenticate, couponApplicationLimiter, couponController.applyCoupon);
 
 /**
  * @route   GET /api/v1/coupons/active
  * @desc    Get all active coupons
  * @access  Customer
  */
-router.get('/active', couponController.getActiveCoupons);
+router.get('/active', authenticate, couponController.getActiveCoupons);
 
 /**
  * @route   GET /api/v1/coupons/available
  * @desc    Get available coupons for current user
  * @access  Customer
  */
-router.get('/available', couponController.getUserAvailableCoupons);
+router.get('/available', authenticate, couponController.getUserAvailableCoupons);
 
 /**
  * @route   GET /api/v1/coupons/code/:code
  * @desc    Get coupon by code
  * @access  Customer
  */
-router.get('/code/:code', couponController.getCouponByCode);
+router.get('/code/:code', authenticate, couponController.getCouponByCode);
 
 // Manager-only routes
 /**
@@ -56,7 +53,8 @@ router.get('/code/:code', couponController.getCouponByCode);
  */
 router.post(
   '/',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.createCoupon
 );
 
@@ -67,7 +65,8 @@ router.post(
  */
 router.get(
   '/',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.getAllCoupons
 );
 
@@ -78,7 +77,8 @@ router.get(
  */
 router.get(
   '/analytics',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.getOverallCouponAnalytics
 );
 
@@ -89,7 +89,8 @@ router.get(
  */
 router.get(
   '/:id',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.getCouponById
 );
 
@@ -100,7 +101,8 @@ router.get(
  */
 router.get(
   '/:id/analytics',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.getCouponAnalytics
 );
 
@@ -111,7 +113,8 @@ router.get(
  */
 router.put(
   '/:id',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.updateCoupon
 );
 
@@ -122,7 +125,8 @@ router.put(
  */
 router.put(
   '/:id/deactivate',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.deactivateCoupon
 );
 
@@ -133,7 +137,8 @@ router.put(
  */
 router.delete(
   '/:id',
-  roleMiddleware.requireAnyRole(['manager', 'admin']),
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
   couponController.deleteCoupon
 );
 

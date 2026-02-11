@@ -1,346 +1,243 @@
+const supabase = require('../../config/supabase.js');
+
 /**
- * INVENTORY CONTROLLER
+ * Reserve Inventory (Soft Lock)
+ * POST /api/inventory/reserve
  * 
- * Handles HTTP requests for inventory/stock management operations.
+ * Creates a temporary reservation for cart items
+ * Prevents overselling during checkout process
  */
-
-const inventoryService = require('../../services/inventoryServices/inventory.service');
-
-/**
- * Get all inventory records
- * GET /api/inventory
- */
-const getAllInventory = async (req, res, next) => {
+const reserveInventory = async (req, res) => {
   try {
-    const { limit } = req.query;
-    const inventory = await inventoryService.findAll({
-      limit: limit ? parseInt(limit) : undefined
-    });
-    res.json(inventory);
-  } catch (error) {
-    next(error);
-  }
-};
+    const userId = req.user?.id;
+    const { cartItems, sessionId } = req.body;
 
-/**
- * Get inventory by product ID
- * GET /api/inventory/product/:productId
- */
-const getInventoryByProduct = async (req, res, next) => {
-  try {
-    const inventory = await inventoryService.findByProductId(req.params.productId);
-    
-    if (!inventory) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Inventory not found for this product'
-      });
+    if (!cartItems || cartItems.length === 0) {
+      return res.status(400).json({ error: 'Cart items required' });
     }
-    
-    res.json(inventory);
-  } catch (error) {
-    next(error);
-  }
-};
+    if (!userId && !sessionId) {
+      return res.status(400).json({ error: 'User ID or session ID required' });
+    }
 
-/**
- * Get available quantity for product
- * GET /api/inventory/product/:productId/available
- */
-const getAvailableQuantity = async (req, res, next) => {
-  try {
-    const available = await inventoryService.getAvailable(req.params.productId);
-    res.json({ 
-      productId: req.params.productId,
-      available 
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+    const reservations = [];
+    const failures = [];
 
-/**
- * Check if product has sufficient stock
- * GET /api/inventory/product/:productId/check?quantity=10
- */
-const checkStock = async (req, res, next) => {
-  try {
-    const { quantity } = req.query;
-    
-    if (!quantity) {
+    // Reserve each item
+    for (const item of cartItems) {
+      try {
+        const { data, error } = await supabase.rpc('reserve_inventory', {
+          p_product_id: item.product_id,
+          p_quantity: item.quantity,
+          p_user_id: userId,
+          p_session_id: sessionId,
+          p_expiration_minutes: 30 // 30 minutes to complete checkout
+        });
+
+        if (error) {
+          failures.push({
+            product_id: item.product_id,
+            error: error.message
+          });
+        } else {
+          reservations.push({
+            product_id: item.product_id,
+            reservation_id: data,
+            quantity: item.quantity
+          });
+        }
+      } catch (error) {
+        failures.push({
+          product_id: item.product_id,
+          error: error.message
+        });
+      }
+    }
+
+    // If any reservations failed, release all successful ones
+    if (failures.length > 0) {
+      for (const reservation of reservations) {
+        await supabase.rpc('release_reservation', {
+          p_reservation_id: reservation.reservation_id
+        });
+      }
+
       return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Quantity parameter is required'
+        error: 'Failed to reserve inventory',
+        failures
       });
     }
-
-    const hasStock = await inventoryService.hasStock(
-      req.params.productId, 
-      parseInt(quantity)
-    );
-    
-    res.json({ 
-      productId: req.params.productId,
-      requiredQuantity: parseInt(quantity),
-      hasStock 
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Get low stock products (Admin only)
- * GET /api/inventory/low-stock
- */
-const getLowStock = async (req, res, next) => {
-  try {
-    const lowStock = await inventoryService.getLowStock();
-    res.json(lowStock);
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Get out of stock products (Admin only)
- * GET /api/inventory/out-of-stock
- */
-const getOutOfStock = async (req, res, next) => {
-  try {
-    const outOfStock = await inventoryService.getOutOfStock();
-    res.json(outOfStock);
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Create inventory record (Admin only)
- * POST /api/inventory
- */
-const createInventory = async (req, res, next) => {
-  try {
-    const { productId, quantity, lowStockThreshold } = req.body;
-
-    if (!productId) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Product ID is required'
-      });
-    }
-
-    // Check if inventory already exists
-    const existing = await inventoryService.findByProductId(productId);
-    if (existing) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Inventory already exists for this product'
-      });
-    }
-
-    const inventory = await inventoryService.create({
-      productId,
-      quantity,
-      lowStockThreshold
-    });
-
-    res.status(201).json({
-      message: 'Inventory created successfully',
-      inventory
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Update inventory quantity (Admin only)
- * PUT /api/inventory/product/:productId/quantity
- */
-const updateQuantity = async (req, res, next) => {
-  try {
-    const { quantity } = req.body;
-
-    if (quantity === undefined || quantity < 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Valid quantity is required'
-      });
-    }
-
-    const inventory = await inventoryService.updateQuantity(
-      req.params.productId,
-      quantity
-    );
 
     res.json({
-      message: 'Inventory quantity updated successfully',
-      inventory
+      success: true,
+      reservations,
+      expires_in_minutes: 30,
+      message: 'Inventory reserved successfully'
     });
+
   } catch (error) {
-    next(error);
+    console.error('Reserve Inventory Error:', error);
+    res.status(500).json({ error: 'Failed to reserve inventory' });
   }
 };
 
 /**
- * Adjust inventory quantity (Admin only)
- * PATCH /api/inventory/product/:productId/adjust
+ * Release Reservation
+ * POST /api/inventory/release/:reservationId
+ * 
+ * Releases a reservation (e.g., when user abandons cart)
  */
-const adjustQuantity = async (req, res, next) => {
+const releaseReservation = async (req, res) => {
   try {
-    const { adjustment } = req.body;
+    const { reservationId } = req.params;
 
-    if (adjustment === undefined) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Adjustment value is required'
-      });
+    const { error } = await supabase.rpc('release_reservation', {
+      p_reservation_id: reservationId
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
     }
 
-    const inventory = await inventoryService.adjustQuantity(
-      req.params.productId,
-      adjustment
-    );
-
     res.json({
-      message: 'Inventory adjusted successfully',
-      inventory
+      success: true,
+      message: 'Reservation released'
     });
+
   } catch (error) {
-    next(error);
+    console.error('Release Reservation Error:', error);
+    res.status(500).json({ error: 'Failed to release reservation' });
   }
 };
 
 /**
- * Reserve inventory (Internal use)
- * POST /api/inventory/product/:productId/reserve
+ * Check Product Availability
+ * GET /api/inventory/check/:productId
+ * 
+ * Checks if product has sufficient stock
  */
-const reserveInventory = async (req, res, next) => {
+const checkAvailability = async (req, res) => {
   try {
-    const { quantity } = req.body;
+    const { productId } = req.params;
+    const { quantity = 1 } = req.query;
 
-    if (!quantity || quantity <= 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Valid quantity is required'
-      });
+    const { data, error } = await supabase.rpc('check_product_availability', {
+      p_product_id: productId,
+      p_quantity: parseInt(quantity)
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
     }
 
-    const inventory = await inventoryService.reserve(
-      req.params.productId,
-      quantity
-    );
+    res.json(data);
 
-    res.json({
-      message: 'Inventory reserved successfully',
-      inventory
-    });
   } catch (error) {
-    next(error);
+    console.error('Check Availability Error:', error);
+    res.status(500).json({ error: 'Failed to check availability' });
   }
 };
 
 /**
- * Release reserved inventory (Internal use)
- * POST /api/inventory/product/:productId/release
+ * Get Inventory Status
+ * GET /api/inventory/status
+ * 
+ * Returns inventory status for all products or specific product
  */
-const releaseInventory = async (req, res, next) => {
+const getInventoryStatus = async (req, res) => {
   try {
-    const { quantity } = req.body;
+    const { productId } = req.query;
 
-    if (!quantity || quantity <= 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Valid quantity is required'
-      });
+    let query = supabase.from('inventory_status').select('*');
+
+    if (productId) {
+      query = query.eq('product_id', productId);
     }
 
-    const inventory = await inventoryService.release(
-      req.params.productId,
-      quantity
-    );
+    const { data, error } = await query;
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
 
     res.json({
-      message: 'Inventory released successfully',
-      inventory
+      success: true,
+      inventory: data
     });
+
   } catch (error) {
-    next(error);
+    console.error('Get Inventory Status Error:', error);
+    res.status(500).json({ error: 'Failed to get inventory status' });
   }
 };
 
 /**
- * Fulfill reserved inventory (Internal use)
- * POST /api/inventory/product/:productId/fulfill
+ * Expire Old Reservations (Cron Job)
+ * POST /api/inventory/expire-reservations
+ * 
+ * Manually trigger expiration of old reservations
+ * Should be called by a cron job every 5-10 minutes
  */
-const fulfillInventory = async (req, res, next) => {
+const expireOldReservations = async (req, res) => {
   try {
-    const { quantity } = req.body;
+    const { data: expiredCount, error } = await supabase.rpc('expire_old_reservations');
 
-    if (!quantity || quantity <= 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Valid quantity is required'
-      });
+    if (error) {
+      return res.status(400).json({ error: error.message });
     }
 
-    const inventory = await inventoryService.fulfill(
-      req.params.productId,
-      quantity
-    );
-
     res.json({
-      message: 'Inventory fulfilled successfully',
-      inventory
+      success: true,
+      expired_count: expiredCount,
+      message: `Expired ${expiredCount} old reservations`
     });
+
   } catch (error) {
-    next(error);
+    console.error('Expire Reservations Error:', error);
+    res.status(500).json({ error: 'Failed to expire reservations' });
   }
 };
 
 /**
- * Update low stock threshold (Admin only)
- * PATCH /api/inventory/product/:productId/threshold
+ * Get Active Reservations
+ * GET /api/inventory/reservations
+ * 
+ * Get all active reservations (admin only)
  */
-const updateThreshold = async (req, res, next) => {
+const getActiveReservations = async (req, res) => {
   try {
-    const { threshold } = req.body;
+    const { data, error } = await supabase
+      .from('inventory_reservations')
+      .select(`
+        *,
+        products:product_id (
+          id,
+          title,
+          sku
+        )
+      `)
+      .eq('status', 'active')
+      .order('reserved_at', { ascending: false });
 
-    if (threshold === undefined || threshold < 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Valid threshold is required'
-      });
+    if (error) {
+      return res.status(400).json({ error: error.message });
     }
-
-    const inventory = await inventoryService.updateThreshold(
-      req.params.productId,
-      threshold
-    );
-
     res.json({
-      message: 'Low stock threshold updated successfully',
-      inventory
+      success: true,
+      reservations: data,
+      count: data.length
     });
+
   } catch (error) {
-    next(error);
+    console.error('Get Active Reservations Error:', error);
+    res.status(500).json({ error: 'Failed to get reservations' });
   }
 };
 
 module.exports = {
-  getAllInventory,
-  getInventoryByProduct,
-  getAvailableQuantity,
-  checkStock,
-  getLowStock,
-  getOutOfStock,
-  createInventory,
-  updateQuantity,
-  adjustQuantity,
   reserveInventory,
-  releaseInventory,
-  fulfillInventory,
-  updateThreshold
+  releaseReservation,
+  checkAvailability,
+  getInventoryStatus,
+  expireOldReservations,
+  getActiveReservations
 };
-

@@ -176,7 +176,7 @@ const createProduct = async (req, res, next) => {
       initialQuantity: initialQuantity || 0,
       lowStockThreshold: lowStockThreshold || 10,
       status: 'active',
-      approvalStatus: 'pending' // New products require approval
+      approvalStatus: 'pending' // New products require approval (lowercase for database constraint)
     };
 
     const product = await productService.create(productData);
@@ -337,6 +337,7 @@ const getApprovalQueue = async (req, res, next) => {
     const products = await productService.findAll(filters);
 
     res.json({
+      success: true,
       count: products.length,
       products
     });

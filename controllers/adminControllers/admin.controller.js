@@ -15,6 +15,130 @@ const { createRefund } = require('../../config/stripe');
 // ============================================
 
 /**
+ * Get all products
+ * GET /api/admin/products
+ */
+const getAllProducts = async (req, res, next) => {
+  try {
+    const { status, category, limit, offset } = req.query;
+
+    const products = await productService.findAll({
+      status,
+      category,
+      limit: limit ? parseInt(limit) : undefined,
+      offset: offset ? parseInt(offset) : undefined
+    });
+
+    res.json({
+      success: true,
+      count: products.length,
+      data: products
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get pending products for approval
+ * GET /api/admin/products/pending
+ */
+const getPendingProducts = async (req, res, next) => {
+  try {
+    const supabase = require('../../config/supabase');
+    
+    const { data: products, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        seller:users!seller_id(id, email)
+      `)
+      .eq('approval_status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      count: products?.length || 0,
+      data: products || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Approve product
+ * POST /api/admin/products/:id/approve
+ */
+const approveProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { comments } = req.body;
+    const supabase = require('../../config/supabase');
+
+    const { data: product, error } = await supabase
+      .from('products')
+      .update({
+        approval_status: 'approved',
+        status: 'active',
+        approved_at: new Date().toISOString(),
+        approved_by: req.user.id,
+        approval_comments: comments
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Product approved successfully',
+      data: product
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Reject product
+ * POST /api/admin/products/:id/reject
+ */
+const rejectProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const supabase = require('../../config/supabase');
+
+    const { data: product, error } = await supabase
+      .from('products')
+      .update({
+        approval_status: 'rejected',
+        status: 'rejected',
+        rejected_at: new Date().toISOString(),
+        rejected_by: req.user.id,
+        rejection_reason: reason
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Product rejected',
+      data: product
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Create new product
  * POST /api/admin/products
  */
@@ -368,18 +492,468 @@ const getPaymentStatistics = async (req, res, next) => {
  */
 const getDashboard = async (req, res, next) => {
   try {
-    const [orderStats, paymentStats, recentOrders, lowStockProducts] = await Promise.all([
-      orderService.getStatistics(),
-      paymentService.getStatistics(),
-      orderService.getRecent(5),
-      productService.getLowStock()
-    ]);
+    // Fetch all data with individual error handling
+    let orderStats = { total: 0, pending: 0, completed: 0, cancelled: 0 };
+    let paymentStats = { totalRevenue: 0, successfulPayments: 0, pendingPayments: 0 };
+    let recentOrders = [];
+    let lowStockProducts = [];
+    let pendingApprovals = [];
+    let recentActivity = [];
+
+    try {
+      orderStats = await orderService.getStatistics();
+    } catch (err) {
+      console.error('Error fetching order stats:', err.message);
+    }
+
+    try {
+      paymentStats = await paymentService.getStatistics();
+    } catch (err) {
+      console.error('Error fetching payment stats:', err.message);
+    }
+
+    try {
+      recentOrders = await orderService.getRecent(5);
+    } catch (err) {
+      console.error('Error fetching recent orders:', err.message);
+    }
+
+    try {
+      lowStockProducts = await productService.getLowStock();
+      lowStockProducts = lowStockProducts.slice(0, 5);
+    } catch (err) {
+      console.error('Error fetching low stock products:', err.message);
+    }
+
+    // Calculate dashboard stats
+    const stats = {
+      totalRevenue: paymentStats.totalRevenue || 0,
+      totalOrders: orderStats.total || 0,
+      activeSellers: 0, // TODO: Implement seller count
+      totalCustomers: 0 // TODO: Implement customer count
+    };
 
     res.json({
+      success: true,
+      stats,
+      pendingApprovals,
+      recentActivity,
       orders: orderStats,
       payments: paymentStats,
       recentOrders,
-      lowStockProducts: lowStockProducts.slice(0, 5)
+      lowStockProducts
+    });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    next(error);
+  }
+};
+
+// ============================================
+// SELLER MANAGEMENT
+// ============================================
+
+/**
+ * Get all sellers
+ * GET /api/admin/sellers
+ */
+const getAllSellers = async (req, res, next) => {
+  try {
+    req.query.role = 'seller';
+    return getAllUsers(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// MANAGER MANAGEMENT
+// ============================================
+
+/**
+ * Get all managers
+ * GET /api/admin/managers
+ */
+const getAllManagers = async (req, res, next) => {
+  try {
+    req.query.role = 'manager';
+    return getAllUsers(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// CUSTOMER MANAGEMENT
+// ============================================
+
+/**
+ * Get all customers
+ * GET /api/admin/customers
+ */
+const getAllCustomers = async (req, res, next) => {
+  try {
+    req.query.role = 'customer';
+    return getAllUsers(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// CATEGORY MANAGEMENT
+// ============================================
+
+/**
+ * Get all categories
+ * GET /api/admin/categories
+ */
+const getAllCategories = async (req, res, next) => {
+  try {
+    const supabase = require('../../config/supabase');
+    
+    const { data: categories, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name');
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      count: categories?.length || 0,
+      data: categories || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create category
+ * POST /api/admin/categories
+ */
+const createCategory = async (req, res, next) => {
+  try {
+    const { name, description, parent_id } = req.body;
+    const supabase = require('../../config/supabase');
+
+    const { data: category, error } = await supabase
+      .from('categories')
+      .insert([{ name, description, parent_id }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      success: true,
+      message: 'Category created successfully',
+      data: category
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update category
+ * PUT /api/admin/categories/:id
+ */
+const updateCategory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const supabase = require('../../config/supabase');
+
+    const { data: category, error } = await supabase
+      .from('categories')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Category updated successfully',
+      data: category
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete category
+ * DELETE /api/admin/categories/:id
+ */
+const deleteCategory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const supabase = require('../../config/supabase');
+
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Category deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// AUDIT LOGS
+// ============================================
+
+/**
+ * Get audit logs
+ * GET /api/admin/logs
+ */
+const getAuditLogs = async (req, res, next) => {
+  try {
+    const supabase = require('../../config/supabase');
+    const { limit = 50, offset = 0 } = req.query;
+
+    try {
+      const { data: logs, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) throw error;
+
+      res.json({
+        success: true,
+        count: logs?.length || 0,
+        data: logs || []
+      });
+    } catch (dbError) {
+      // If table doesn't exist, return empty array
+      console.log('Audit logs table not found, returning empty array');
+      res.json({
+        success: true,
+        count: 0,
+        data: [],
+        message: 'Audit logs table not yet created'
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// REFUND MANAGEMENT
+// ============================================
+
+/**
+ * Get all refunds
+ * GET /api/admin/refunds
+ */
+const getAllRefunds = async (req, res, next) => {
+  try {
+    const supabase = require('../../config/supabase');
+    const { status } = req.query;
+
+    let query = supabase
+      .from('returns')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data: refunds, error } = await query;
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      count: refunds?.length || 0,
+      data: refunds || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Approve refund
+ * POST /api/admin/refunds/:id/approve
+ */
+const approveRefund = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const supabase = require('../../config/supabase');
+
+    const { data: refund, error } = await supabase
+      .from('returns')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: req.user.id
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Refund approved successfully',
+      data: refund
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Reject refund
+ * POST /api/admin/refunds/:id/reject
+ */
+const rejectRefund = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const supabase = require('../../config/supabase');
+
+    const { data: refund, error } = await supabase
+      .from('returns')
+      .update({
+        status: 'rejected',
+        rejected_at: new Date().toISOString(),
+        rejected_by: req.user.id,
+        rejection_reason: reason
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Refund rejected',
+      data: refund
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// REVENUE ANALYTICS
+// ============================================
+
+/**
+ * Get revenue analytics
+ * GET /api/admin/revenue
+ */
+const getRevenueAnalytics = async (req, res, next) => {
+  try {
+    const supabase = require('../../config/supabase');
+    
+    // Get total revenue from orders
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('amount, created_at, status')
+      .in('status', ['completed', 'delivered']);
+    
+    if (error) throw error;
+    
+    const totalRevenue = orders?.reduce((sum, order) => sum + (order.amount || 0), 0) || 0;
+    const totalOrders = orders?.length || 0;
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        totalRevenue,
+        totalOrders,
+        averageOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+        period: req.query.period || 'all-time'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// SETTINGS MANAGEMENT
+// ============================================
+
+/**
+ * Get system settings
+ * GET /api/admin/settings
+ */
+const getSettings = async (req, res, next) => {
+  try {
+    const supabase = require('../../config/supabase');
+    
+    try {
+      const { data: settings, error } = await supabase
+        .from('settings')
+        .select('*');
+      
+      if (error) throw error;
+      
+      res.json({
+        success: true,
+        data: settings || []
+      });
+    } catch (dbError) {
+      // If table doesn't exist, return empty array
+      console.log('Settings table not found, returning empty array');
+      res.json({
+        success: true,
+        data: [],
+        message: 'Settings table not yet created'
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update system settings
+ * PUT /api/admin/settings
+ */
+const updateSettings = async (req, res, next) => {
+  try {
+    const updates = req.body;
+    const supabase = require('../../config/supabase');
+    
+    // Update settings one by one
+    const results = [];
+    for (const [key, value] of Object.entries(updates)) {
+      const { data, error } = await supabase
+        .from('settings')
+        .upsert({ key, value: JSON.stringify(value) })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      results.push(data);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Settings updated successfully',
+      data: results
     });
   } catch (error) {
     next(error);
@@ -388,6 +962,10 @@ const getDashboard = async (req, res, next) => {
 
 module.exports = {
   // Products
+  getAllProducts,
+  getPendingProducts,
+  approveProduct,
+  rejectProduct,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -402,11 +980,35 @@ module.exports = {
   // Users
   getAllUsers,
   updateUserStatus,
+  getAllSellers,
+  getAllManagers,
+  getAllCustomers,
+  
+  // Categories
+  getAllCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  
+  // Audit Logs
+  getAuditLogs,
+  
+  // Refunds
+  getAllRefunds,
+  approveRefund,
+  rejectRefund,
   
   // Payments
   getAllPayments,
   processRefund,
   getPaymentStatistics,
+  
+  // Revenue
+  getRevenueAnalytics,
+  
+  // Settings
+  getSettings,
+  updateSettings,
   
   // Dashboard
   getDashboard

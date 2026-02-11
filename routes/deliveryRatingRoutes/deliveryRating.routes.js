@@ -10,14 +10,14 @@
 const express = require('express');
 const router = express.Router();
 const deliveryRatingController = require('../../controllers/deliveryRatingControllers/deliveryRating.controller');
-const authMiddleware = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
 const roleMiddleware = require('../../middlewares/role.middleware');
 const { ratingSubmissionLimiter } = require('../../middlewares/rateLimiter.middleware');
 
 // Submit delivery rating (Customer only)
 router.post(
   '/',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireRole('customer'),
   ratingSubmissionLimiter,
   deliveryRatingController.submitDeliveryRating
@@ -26,7 +26,7 @@ router.post(
 // Get delivery rating for order (Authenticated users)
 router.get(
   '/orders/:orderId',
-  authMiddleware,
+  authenticate,
   deliveryRatingController.getOrderDeliveryRating
 );
 
@@ -45,7 +45,7 @@ router.get(
 // Get delivery rating analytics (Manager and Admin only)
 router.get(
   '/analytics',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireAnyRole(['manager', 'admin']),
   deliveryRatingController.getDeliveryRatingAnalytics
 );
@@ -53,7 +53,7 @@ router.get(
 // Get flagged ratings (Manager and Admin only)
 router.get(
   '/flagged',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireAnyRole(['manager', 'admin']),
   deliveryRatingController.getFlaggedRatings
 );
@@ -61,7 +61,7 @@ router.get(
 // Flag a rating for review (Manager and Admin only)
 router.put(
   '/:ratingId/flag',
-  authMiddleware,
+  authenticate,
   roleMiddleware.requireAnyRole(['manager', 'admin']),
   deliveryRatingController.flagRating
 );
