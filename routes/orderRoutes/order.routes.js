@@ -38,20 +38,7 @@ router.get('/api/orders/:id/with-refunds', authenticate, orderController.getOrde
 // Check refund eligibility
 router.get('/api/orders/:id/refund-eligibility', authenticate, orderController.checkRefundEligibility);
 
-// ============================================
-// ADMIN ROUTES
-// ============================================
-
-// Get all orders
-router.get('/api/admin/orders', authenticate, requireAdmin, orderController.getAllOrders);
-
-// Get order statistics
-router.get('/api/admin/orders/statistics', authenticate, requireAdmin, orderController.getStatistics);
-
-// Get recent orders
-router.get('/api/admin/orders/recent', authenticate, requireAdmin, orderController.getRecentOrders);
-
-// Update order status
-router.patch('/api/admin/orders/:id/status', authenticate, requireAdmin, orderController.updateOrderStatus);
+// NOTE: Admin order routes are now in adminRoutes/admin.routes.js
+// This prevents route conflicts and keeps admin routes centralized
 
 module.exports = router;

@@ -122,40 +122,106 @@ const search = async (filters) => {
  * @returns {Promise<Object>} Created product object
  */
 const create = async (productData) => {
-  const { data: product, error: productError } = await supabase
-    .from('products')
-    .insert([{
-      title: productData.title,
-      description: productData.description,
-      price: productData.price,
-      image_url: productData.imageUrl,
+  try {
+    console.log('📦 Creating product with data:', JSON.stringify(productData, null, 2));
+    
+    // Validate required fields
+    if (!productData.title || !productData.description || !productData.price || !productData.sellerId) {
+      throw new Error('Missing required fields: title, description, price, and sellerId are required');
+    }
+    
+    // Ensure price is a valid number
+    const price = parseFloat(productData.price);
+    if (isNaN(price) || price <= 0) {
+      throw new Error('Price must be a valid positive number');
+    }
+    
+    // Prepare product data with safe defaults
+    const insertData = {
+      title: productData.title.trim(),
+      description: productData.description.trim(),
+      price: price,
+      image_url: productData.imageUrl || 'https://via.placeholder.com/400x400/667eea/ffffff?text=Product',
       category_id: productData.categoryId || null,
       seller_id: productData.sellerId,
       status: productData.status || 'active',
       approval_status: productData.approvalStatus || 'pending',
-      created_by: productData.sellerId
-    }])
-    .select(`
-      *,
-      category:categories(id, name),
-      seller:users!products_seller_id_fkey(id, display_name, business_name, email)
-    `)
-    .single();
-  
-  if (productError) throw productError;
+      created_by: productData.sellerId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    console.log('📦 Inserting product data:', JSON.stringify(insertData, null, 2));
+    
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .insert([insertData])
+      .select(`
+        *,
+        category:categories(id, name),
+        seller:users!products_seller_id_fkey(id, display_name, business_name, email)
+      `)
+      .single();
+    
+    if (productError) {
+      console.error('❌ Product creation error:', productError);
+      console.error('❌ Error details:', {
+        message: productError.message,
+        details: productError.details,
+        hint: productError.hint,
+        code: productError.code
+      });
+      throw new Error(`Product creation failed: ${productError.message}`);
+    }
 
-  // Create inventory record
-  const { error: inventoryError } = await supabase
-    .from('inventory')
-    .insert([{
-      product_id: product.id,
-      quantity: productData.initialQuantity || 0,
-      low_stock_threshold: productData.lowStockThreshold || 10
-    }]);
-  
-  if (inventoryError) throw inventoryError;
-  
-  return product;
+    console.log('✅ Product created successfully:', product.id);
+
+    // Create inventory record with error handling
+    try {
+      const inventoryData = {
+        product_id: product.id,
+        quantity: parseInt(productData.initialQuantity) || 0,
+        low_stock_threshold: parseInt(productData.lowStockThreshold) || 10,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('📦 Creating inventory with data:', JSON.stringify(inventoryData, null, 2));
+      
+      const { error: inventoryError } = await supabase
+        .from('inventory')
+        .insert([inventoryData]);
+      
+      if (inventoryError) {
+        console.error('❌ Inventory creation error:', inventoryError);
+        console.error('❌ Inventory error details:', {
+          message: inventoryError.message,
+          details: inventoryError.details,
+          hint: inventoryError.hint,
+          code: inventoryError.code
+        });
+        
+        // Don't fail the entire operation if inventory creation fails
+        // The product was created successfully
+        console.log('⚠️ Product created but inventory creation failed. Continuing...');
+      } else {
+        console.log('✅ Inventory created for product:', product.id);
+      }
+    } catch (invError) {
+      console.error('❌ Inventory creation exception:', invError.message);
+      console.log('⚠️ Product created but inventory creation failed. Continuing...');
+    }
+    
+    return product;
+  } catch (error) {
+    console.error('❌ Error in product.service.create:', error);
+    console.error('❌ Full error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    throw error;
+  }
 };
 
 /**

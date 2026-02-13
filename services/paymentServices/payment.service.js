@@ -138,7 +138,8 @@ const findAll = async (filters = {}) => {
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (filters.status) {
+  // Only apply status filter if it exists and is not 'all'
+  if (filters.status && filters.status !== 'all') {
     query = query.eq('status', filters.status);
   }
 

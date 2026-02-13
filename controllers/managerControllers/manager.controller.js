@@ -705,6 +705,339 @@ const getCustomerFeedback = async (req, res, next) => {
   }
 };
 
+// ============================================
+// MANAGER CRUD OPERATIONS (Admin only)
+// ============================================
+
+/**
+ * Get all managers (admin only)
+ */
+const getAllManagers = async (req, res, next) => {
+  try {
+    const { search, status, department, limit, offset } = req.query;
+    
+    const supabase = require('../../config/supabase');
+    
+    let query = supabase
+      .from('users')
+      .select('*')
+      .eq('role', 'manager');
+    
+    // Apply filters
+    if (search) {
+      query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+    
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+    
+    if (department && department !== 'all') {
+      query = query.eq('manager_department', department);
+    }
+    
+    // Apply pagination
+    if (limit) {
+      query = query.limit(parseInt(limit));
+    }
+    
+    if (offset) {
+      query = query.range(parseInt(offset), parseInt(offset) + parseInt(limit || 20) - 1);
+    }
+    
+    // Order by created date
+    query = query.order('created_at', { ascending: false });
+    
+    const { data: managers, error } = await query;
+    
+    if (error) throw error;
+    
+    // Get total count for pagination
+    const { count: totalCount } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'manager');
+    
+    res.status(200).json({
+      success: true,
+      count: managers?.length || 0,
+      totalCount: totalCount || 0,
+      managers: managers || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get manager by ID (admin only)
+ */
+const getManagerById = async (req, res, next) => {
+  try {
+    const { managerId } = req.params;
+    
+    const supabase = require('../../config/supabase');
+    
+    const { data: manager, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', managerId)
+      .eq('role', 'manager')
+      .single();
+    
+    if (error || !manager) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manager not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      manager
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create new manager (admin only)
+ */
+const createManager = async (req, res, next) => {
+  try {
+    const { 
+      email, 
+      password, 
+      displayName, 
+      phone,
+      department,
+      permissions = []
+    } = req.body;
+    
+    // Validation
+    if (!email || !password || !displayName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, password, and display name are required'
+      });
+    }
+    
+    // Check if user already exists
+    const supabase = require('../../config/supabase');
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+    
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+    
+    // Hash password
+    const bcrypt = require('bcrypt');
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    // Create manager user
+    const { data: manager, error } = await supabase
+      .from('users')
+      .insert([{
+        email,
+        password_hash: passwordHash,
+        role: 'manager',
+        display_name: displayName,
+        phone,
+        manager_department: department,
+        manager_permissions: permissions,
+        status: 'active'
+      }])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    res.status(201).json({
+      success: true,
+      message: 'Manager created successfully',
+      manager
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update manager (admin only)
+ */
+const updateManager = async (req, res, next) => {
+  try {
+    const { managerId } = req.params;
+    const updates = req.body;
+    
+    // Remove sensitive fields that shouldn't be updated directly
+    delete updates.password_hash;
+    delete updates.id;
+    delete updates.created_at;
+    delete updates.updated_at;
+    delete updates.role; // Don't allow role changes through this endpoint
+    
+    // Map frontend field names to database column names
+    const fieldMapping = {
+      displayName: 'display_name',
+      department: 'manager_department',
+      permissions: 'manager_permissions'
+    };
+    
+    // Convert field names
+    const dbUpdates = {};
+    Object.keys(updates).forEach(key => {
+      const dbColumn = fieldMapping[key] || key;
+      // Only include columns that exist and are allowed to be updated
+      const allowedColumns = [
+        'display_name', 'phone', 'manager_department', 'manager_permissions', 'status'
+      ];
+      
+      if (allowedColumns.includes(dbColumn)) {
+        dbUpdates[dbColumn] = updates[key];
+      }
+    });
+    
+    if (Object.keys(dbUpdates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid fields to update'
+      });
+    }
+    
+    const supabase = require('../../config/supabase');
+    
+    const { data: manager, error } = await supabase
+      .from('users')
+      .update(dbUpdates)
+      .eq('id', managerId)
+      .eq('role', 'manager')
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    if (!manager) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manager not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Manager updated successfully',
+      manager
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete manager (admin only)
+ */
+const deleteManager = async (req, res, next) => {
+  try {
+    const { managerId } = req.params;
+    
+    const supabase = require('../../config/supabase');
+    
+    // Check if manager exists
+    const { data: manager, error: checkError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('id', managerId)
+      .eq('role', 'manager')
+      .single();
+    
+    if (checkError || !manager) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manager not found'
+      });
+    }
+    
+    // Check if manager has active responsibilities (optional - can be implemented later)
+    // For now, we'll allow deletion
+    
+    // Soft delete by updating email to mark as deleted
+    const deletedEmail = `deleted_${Date.now()}_${manager.email}`;
+    
+    const { error: deleteError } = await supabase
+      .from('users')
+      .update({ 
+        email: deletedEmail,
+        status: 'deleted'
+      })
+      .eq('id', managerId);
+    
+    if (deleteError) throw deleteError;
+    
+    res.status(200).json({
+      success: true,
+      message: 'Manager deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update manager status (admin only)
+ */
+const updateManagerStatus = async (req, res, next) => {
+  try {
+    const { managerId } = req.params;
+    const { status } = req.body;
+    
+    // Validate status
+    const validStatuses = ['active', 'blocked', 'deleted'];
+    
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Valid statuses: ${validStatuses.join(', ')}`
+      });
+    }
+    
+    const supabase = require('../../config/supabase');
+    
+    const { data: manager, error } = await supabase
+      .from('users')
+      .update({ status })
+      .eq('id', managerId)
+      .eq('role', 'manager')
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    if (!manager) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manager not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `Manager status updated to ${status}`,
+      manager
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getPendingProducts,
@@ -737,5 +1070,12 @@ module.exports = {
   approveReview,
   removeReview,
   getCustomerFeedback,
-  getActivityLog
+  getActivityLog,
+  // Manager CRUD operations
+  getAllManagers,
+  getManagerById,
+  createManager,
+  updateManager,
+  deleteManager,
+  updateManagerStatus
 };

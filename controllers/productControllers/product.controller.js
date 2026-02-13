@@ -148,45 +148,124 @@ const searchProducts = async (req, res, next) => {
  */
 const createProduct = async (req, res, next) => {
   try {
+    console.log('📦 Create product request from seller:', req.user?.id);
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    console.log('📦 Request headers:', JSON.stringify(req.headers, null, 2));
+    
     const { title, description, price, imageUrl, categoryId, initialQuantity, lowStockThreshold } = req.body;
-    const sellerId = req.user.id;
+    const sellerId = req.user?.id;
 
-    // Validation
-    if (!title || !description || !price) {
-      return res.status(400).json({ 
-        error: 'Validation Error',
-        message: 'Title, description, and price are required' 
+    // Enhanced validation
+    if (!sellerId) {
+      console.log('❌ Validation failed: no seller ID in request');
+      return res.status(401).json({ 
+        error: 'Authentication Error',
+        message: 'Seller ID not found in request. Please login again.' 
       });
     }
 
-    if (price <= 0) {
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      console.log('❌ Validation failed: invalid title');
       return res.status(400).json({ 
         error: 'Validation Error',
-        message: 'Price must be greater than 0' 
+        message: 'Title is required and must be a non-empty string' 
       });
     }
 
+    if (!description || typeof description !== 'string' || description.trim().length === 0) {
+      console.log('❌ Validation failed: invalid description');
+      return res.status(400).json({ 
+        error: 'Validation Error',
+        message: 'Description is required and must be a non-empty string' 
+      });
+    }
+
+    if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
+      console.log('❌ Validation failed: invalid price:', price);
+      return res.status(400).json({ 
+        error: 'Validation Error',
+        message: 'Price is required and must be a positive number' 
+      });
+    }
+
+    // Prepare product data with safe parsing
     const productData = {
-      title,
-      description,
-      price,
-      imageUrl,
-      categoryId,
-      sellerId,
-      initialQuantity: initialQuantity || 0,
-      lowStockThreshold: lowStockThreshold || 10,
+      title: title.trim(),
+      description: description.trim(),
+      price: parseFloat(price),
+      imageUrl: imageUrl && imageUrl.trim() ? imageUrl.trim() : null,
+      categoryId: categoryId || null,
+      sellerId: sellerId,
+      initialQuantity: initialQuantity ? parseInt(initialQuantity) : 0,
+      lowStockThreshold: lowStockThreshold ? parseInt(lowStockThreshold) : 10,
       status: 'active',
       approvalStatus: 'pending' // New products require approval (lowercase for database constraint)
     };
 
+    console.log('📦 Creating product with processed data:', JSON.stringify(productData, null, 2));
+
     const product = await productService.create(productData);
 
+    console.log('✅ Product created successfully:', product.id);
+
     res.status(201).json({
+      success: true,
       message: 'Product created successfully. Pending manager approval.',
       product
     });
   } catch (error) {
-    next(error);
+    console.error('❌ Error in createProduct controller:', error);
+    console.error('❌ Error details:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      stack: error.stack
+    });
+    
+    // Send appropriate error response
+    if (error.message && error.message.includes('Missing required fields')) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: error.message
+      });
+    }
+    
+    if (error.message && error.message.includes('Price must be')) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: error.message
+      });
+    }
+    
+    // Database constraint errors
+    if (error.code === '23505') { // Unique constraint violation
+      return res.status(409).json({
+        error: 'Conflict Error',
+        message: 'A product with similar details already exists'
+      });
+    }
+    
+    if (error.code === '23503') { // Foreign key constraint violation
+      return res.status(400).json({
+        error: 'Reference Error',
+        message: 'Invalid reference to seller, category, or store'
+      });
+    }
+    
+    if (error.code === '23514') { // Check constraint violation
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Data does not meet database constraints'
+      });
+    }
+    
+    // Generic server error
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to create product. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

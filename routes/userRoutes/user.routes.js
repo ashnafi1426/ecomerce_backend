@@ -40,8 +40,8 @@ router.get('/api/users/search', authenticate, requireAdmin, userController.searc
 // Get all users
 router.get('/api/users', authenticate, requireAdmin, userController.getAllUsers);
 
-// Create user
-router.post('/api/users', authenticate, requireAdmin, userController.createUser);
+// Create user - DISABLED: Using admin routes instead
+// router.post('/api/users', authenticate, requireAdmin, userController.createUser);
 
 // Get user by ID
 router.get('/api/users/:id', authenticate, requireAdmin, userController.getUserById);
@@ -76,9 +76,6 @@ router.post('/api/admin/users/manager', authenticate, requireAdmin, userControll
 
 // Get all managers (Admin only)
 router.get('/api/admin/managers', authenticate, requireAdmin, userController.getAllManagers);
-
-// Get all sellers (Admin/Manager)
-router.get('/api/admin/sellers', authenticate, requireAnyRole(['admin', 'manager']), userController.getAllSellers);
 
 // Get seller by ID (Admin/Manager)
 router.get('/api/admin/sellers/:id', authenticate, requireAnyRole(['admin', 'manager']), userController.getSellerById);

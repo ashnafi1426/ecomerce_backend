@@ -3,6 +3,19 @@ import supabase from '../../config/supabase.js';
 import { splitOrderBySeller, notifySellers } from '../../services/orderServices/order-splitting-with-email.service.js';
 
 /**
+ * FASTSHOP PAYMENT CONTROLLER - COMPLETE IMPLEMENTATION
+ * ====================================================
+ * 
+ * Handles the complete payment flow:
+ * 1. Payment Intent Creation (with backend price validation)
+ * 2. Order Creation after payment success
+ * 3. Multi-vendor order splitting
+ * 4. Commission calculation and seller earnings
+ * 5. Admin payment management
+ * 6. Refund processing
+ */
+
+/**
  * Create Payment Intent
  * POST /api/payments/create-intent
  * 
@@ -14,15 +27,52 @@ export const createPaymentIntent = async (req, res) => {
     const userId = req.user?.id; // Can be null for guest checkout
     const { cartItems, shippingAddress, billingAddress } = req.body;
 
+    // Enhanced validation for cart items
     if (!cartItems || cartItems.length === 0) {
       return res.status(400).json({ error: 'Cart is empty' });
+    }
+
+    // Validate each cart item has required fields
+    for (let i = 0; i < cartItems.length; i++) {
+      const item = cartItems[i];
+      
+      if (!item.id) {
+        return res.status(400).json({ 
+          error: 'Invalid cart item',
+          message: `Cart item at index ${i} is missing product ID` 
+        });
+      }
+      
+      if (!item.quantity || item.quantity <= 0) {
+        return res.status(400).json({ 
+          error: 'Invalid cart item',
+          message: `Cart item at index ${i} has invalid quantity` 
+        });
+      }
+      
+      // Validate UUID format for product ID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(item.id)) {
+        return res.status(400).json({ 
+          error: 'Invalid cart item',
+          message: `Cart item at index ${i} has invalid product ID format` 
+        });
+      }
+    }
+
+    // Validate shipping address
+    if (!shippingAddress || !shippingAddress.fullName || !shippingAddress.email || !shippingAddress.address) {
+      return res.status(400).json({ 
+        error: 'Invalid shipping address',
+        message: 'Shipping address must include fullName, email, and address' 
+      });
     }
 
     // 1. Fetch actual product prices from database (NEVER trust frontend)
     const productIds = cartItems.map(item => item.id);
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, price, title, status')
+      .select('id, price, title, status, approval_status')
       .in('id', productIds);
 
     if (productsError) {
@@ -36,13 +86,22 @@ export const createPaymentIntent = async (req, res) => {
       
       if (!product) {
         return res.status(400).json({ 
-          error: `Product ${cartItem.id} not found` 
+          error: `Product not found`,
+          message: `Product with ID ${cartItem.id} does not exist`
         });
       }
       
       if (product.status !== 'active') {
         return res.status(400).json({ 
-          error: `Product "${product.title}" is not available` 
+          error: `Product unavailable`,
+          message: `Product "${product.title}" is not available (status: ${product.status})`
+        });
+      }
+      
+      if (product.approval_status !== 'approved') {
+        return res.status(400).json({ 
+          error: `Product not approved`,
+          message: `Product "${product.title}" is not approved for sale`
         });
       }
     }
@@ -430,6 +489,195 @@ export const createOrderAfterPayment = async (req, res) => {
     console.error('Create Order After Payment Error:', error);
     res.status(500).json({ 
       error: 'Failed to create order',
+      message: error.message 
+    });
+  }
+};
+
+/**
+ * ADMIN: Get all payments
+ * GET /api/admin/payments
+ */
+export const getAllPayments = async (req, res) => {
+  try {
+    const { status, userId, limit, offset } = req.query;
+
+    console.log('[getAllPayments] Query params:', { status, userId, limit, offset });
+
+    let query = supabase
+      .from('payments')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    // Apply filters
+    if (status && status !== 'all') {
+      console.log('[getAllPayments] Applying status filter:', status);
+      query = query.eq('status', status);
+    } else {
+      console.log('[getAllPayments] NOT applying status filter (status is:', status, ')');
+    }
+
+    if (userId) {
+      console.log('[getAllPayments] Applying userId filter:', userId);
+      query = query.eq('user_id', userId);
+    }
+
+    // Apply pagination
+    if (limit) {
+      const limitNum = parseInt(limit);
+      const offsetNum = parseInt(offset) || 0;
+      console.log('[getAllPayments] Applying pagination:', { limitNum, offsetNum });
+      query = query.range(offsetNum, offsetNum + limitNum - 1);
+    }
+
+    const { data: payments, error } = await query;
+
+    if (error) {
+      console.error('[getAllPayments] Supabase error:', error);
+      throw error;
+    }
+
+    console.log('[getAllPayments] Query result:', { count: payments?.length || 0 });
+
+    res.json({
+      success: true,
+      count: payments?.length || 0,
+      payments: payments || []
+    });
+  } catch (error) {
+    console.error('Error in getAllPayments:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch payments',
+      message: error.message 
+    });
+  }
+};
+
+/**
+ * ADMIN: Get payment statistics
+ * GET /api/admin/payments/statistics
+ */
+export const getPaymentStatistics = async (req, res) => {
+  try {
+    const { data: payments, error } = await supabase
+      .from('payments')
+      .select('status, amount');
+    
+    if (error) throw error;
+    
+    const stats = {
+      total_payments: payments?.length || 0,
+      successful: 0,
+      pending: 0,
+      failed: 0,
+      refunded: 0,
+      total_amount: 0,
+      successful_amount: 0
+    };
+
+    payments?.forEach(payment => {
+      if (payment.status === 'succeeded') {
+        stats.successful++;
+        stats.successful_amount += payment.amount;
+      } else if (payment.status === 'pending') {
+        stats.pending++;
+      } else if (payment.status === 'failed') {
+        stats.failed++;
+      } else if (payment.status === 'refunded') {
+        stats.refunded++;
+      }
+      
+      stats.total_amount += payment.amount;
+    });
+    
+    res.json(stats);
+  } catch (error) {
+    console.error('Error in getPaymentStatistics:', error);
+    res.status(500).json({ 
+      error: 'Failed to get payment statistics',
+      message: error.message 
+    });
+  }
+};
+
+/**
+ * ADMIN: Process refund
+ * POST /api/admin/payments/:id/refund
+ */
+export const processRefund = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, reason } = req.body;
+
+    // Get payment record
+    const { data: payment, error: fetchError } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError || !payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (payment.status !== 'succeeded') {
+      return res.status(400).json({ error: 'Can only refund successful payments' });
+    }
+
+    // Determine refund amount (full or partial)
+    const refundAmount = amount || payment.amount;
+    
+    // Validate refund amount
+    if (refundAmount > payment.amount) {
+      return res.status(400).json({ error: 'Refund amount cannot exceed payment amount' });
+    }
+
+    // Create refund in Stripe
+    const refund = await stripe.refunds.create({
+      payment_intent: payment.stripe_payment_intent_id,
+      amount: refundAmount,
+      reason: reason || 'requested_by_customer'
+    });
+
+    // Determine if this is a partial refund
+    const isPartial = refundAmount < payment.amount;
+
+    // Update payment status
+    if (isPartial) {
+      await supabase
+        .from('payments')
+        .update({ 
+          refunded_amount: refundAmount,
+          last_refund_at: new Date().toISOString()
+        })
+        .eq('id', id);
+    } else {
+      await supabase
+        .from('payments')
+        .update({ status: 'refunded' })
+        .eq('id', id);
+    }
+
+    // Update order status if order exists
+    if (payment.order_id) {
+      const orderStatus = isPartial ? 'partially_refunded' : 'refunded';
+      await supabase
+        .from('orders')
+        .update({ status: orderStatus })
+        .eq('id', payment.order_id);
+    }
+
+    res.json({
+      success: true,
+      message: isPartial ? 'Partial refund processed successfully' : 'Full refund processed successfully',
+      refund,
+      isPartial,
+      refundAmount
+    });
+  } catch (error) {
+    console.error('Error in processRefund:', error);
+    res.status(500).json({ 
+      error: 'Failed to process refund',
       message: error.message 
     });
   }

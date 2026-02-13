@@ -69,4 +69,16 @@ router.get('/api/manager/feedback/customers', authenticate, requireAnyRole(['adm
 // Activity log
 router.get('/api/manager/activity', authenticate, requireAnyRole(['admin', 'manager']), managerController.getActivityLog);
 
+// ============================================
+// MANAGER CRUD OPERATIONS (Admin only)
+// ============================================
+
+// Admin routes for manager management
+router.get('/api/managers', authenticate, requireAnyRole(['admin']), managerController.getAllManagers);
+router.get('/api/managers/:managerId', authenticate, requireAnyRole(['admin']), managerController.getManagerById);
+router.post('/api/managers', authenticate, requireAnyRole(['admin']), managerController.createManager);
+router.put('/api/managers/:managerId', authenticate, requireAnyRole(['admin']), managerController.updateManager);
+router.delete('/api/managers/:managerId', authenticate, requireAnyRole(['admin']), managerController.deleteManager);
+router.put('/api/managers/:managerId/status', authenticate, requireAnyRole(['admin']), managerController.updateManagerStatus);
+
 module.exports = router;

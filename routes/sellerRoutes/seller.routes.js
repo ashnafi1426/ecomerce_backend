@@ -18,6 +18,13 @@ router.get('/api/seller/profile', authenticate, requireSeller, sellerController.
 router.get('/api/seller/dashboard', authenticate, requireSeller, sellerController.getDashboardStats);
 router.get('/api/seller/dashboard/stats', authenticate, requireSeller, sellerController.getDashboardStats);
 
+// Seller payment routes - REMOVED: Now handled by seller-payment.routes.js
+// router.get('/api/seller/payouts/balance', authenticate, requireSeller, sellerController.getPayoutBalance);
+// router.get('/api/seller/earnings', authenticate, requireSeller, sellerController.getEarnings);
+// router.get('/api/seller/payouts', authenticate, requireSeller, sellerController.getPayouts);
+// router.post('/api/seller/payouts/request', authenticate, requireSeller, sellerController.requestPayout);
+// router.get('/api/seller/payment-account', authenticate, requireSeller, sellerController.getPaymentAccount);
+
 // Seller products (seller only) - Get seller's products
 router.get('/api/seller/products', authenticate, requireSeller, async (req, res, next) => {
   try {
@@ -170,10 +177,10 @@ router.get('/api/seller/documents', authenticate, requireSeller, sellerControlle
 // Seller performance (seller only)
 router.get('/api/seller/performance', authenticate, requireSeller, sellerController.getPerformance);
 
-// Seller earnings and payouts (seller only)
-router.get('/api/seller/earnings', authenticate, requireSeller, sellerController.getEarnings);
-router.post('/api/seller/payout', authenticate, requireSeller, sellerController.requestPayout);
-router.get('/api/seller/payouts', authenticate, requireSeller, sellerController.getPayoutRequests);
+// Seller earnings and payouts - REMOVED: Now handled by seller-payment.routes.js
+// router.get('/api/seller/earnings', authenticate, requireSeller, sellerController.getEarnings);
+// router.post('/api/seller/payout', authenticate, requireSeller, sellerController.requestPayout);
+// router.get('/api/seller/payouts', authenticate, requireSeller, sellerController.getPayoutRequests);
 
 // Seller inventory (seller only) - Get inventory for seller's products
 router.get('/api/seller/inventory', authenticate, requireSeller, async (req, res, next) => {
@@ -490,48 +497,17 @@ router.get('/api/seller/analytics/sales', authenticate, requireSeller, async (re
   }
 });
 
-// Seller payout balance endpoint
-router.get('/api/seller/payouts/balance', authenticate, requireSeller, async (req, res, next) => {
-  try {
-    const sellerId = req.user.id;
-    const supabase = require('../../config/supabase');
-    
-    // Get seller balance
-    const { data: balance, error } = await supabase
-      .from('seller_balances')
-      .select('*')
-      .eq('seller_id', sellerId)
-      .single();
-    
-    if (error) {
-      // If no balance record exists, return zeros
-      return res.status(200).json({
-        success: true,
-        balance: {
-          available_balance: 0,
-          pending_balance: 0,
-          escrow_balance: 0,
-          total_earnings: 0
-        }
-      });
-    }
-    
-    res.status(200).json({
-      success: true,
-      balance: balance || {
-        available_balance: 0,
-        pending_balance: 0,
-        escrow_balance: 0,
-        total_earnings: 0
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+// Seller payout balance endpoint - REMOVED: Now handled by seller-payment.routes.js
+// router.get('/api/seller/payouts/balance', authenticate, requireSeller, async (req, res, next) => {
+// });
 
 // Admin/Manager routes for seller management
 router.get('/api/sellers', authenticate, requireAnyRole(['admin', 'manager']), sellerController.getAllSellers);
+router.get('/api/sellers/:sellerId', authenticate, requireAnyRole(['admin', 'manager']), sellerController.getSellerById);
+router.post('/api/sellers', authenticate, requireAnyRole(['admin']), sellerController.createSeller);
+router.put('/api/sellers/:sellerId', authenticate, requireAnyRole(['admin']), sellerController.updateSeller);
+router.delete('/api/sellers/:sellerId', authenticate, requireAnyRole(['admin']), sellerController.deleteSeller);
+router.put('/api/sellers/:sellerId/status', authenticate, requireAnyRole(['admin']), sellerController.updateSellerStatus);
 router.post('/api/sellers/:sellerId/verify', authenticate, requireAnyRole(['admin', 'manager']), sellerController.verifySeller);
 router.post('/api/sellers/documents/:documentId/verify', authenticate, requireAnyRole(['admin', 'manager']), sellerController.verifyDocument);
 

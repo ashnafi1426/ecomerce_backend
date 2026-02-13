@@ -54,8 +54,17 @@ const inventoryEnhancedRouter = require('./inventoryRoutes/inventory.routes');
 // Amazon-style Product Approval Workflow
 const approvalRouter = require('./approvalRoutes/approval.routes');
 
+// Phase 2: Seller Payment System
+const sellerPaymentRouter = require('./paymentRoutes/seller-payment.routes');
+
+// Stripe Payment System
+const stripePaymentRouter = require('./paymentRoutes/stripe-payment.routes');
+
+// Wishlist System
+const wishlistRouter = require('./wishlistRoutes/wishlist.routes');
+
 // Add routes to the main router
-router.use(authRouter);
+router.use('/api/auth', authRouter); // Mount auth routes with prefix
 router.use(userRouter);
 router.use(productRouter);
 router.use(orderRouter);
@@ -68,7 +77,7 @@ router.use(cartRouter);
 router.use(paymentRouter);
 router.use(reviewRouter);
 router.use(analyticsRouter);
-router.use(commissionRouter);
+router.use('/api', commissionRouter);
 router.use(sellerBalanceRouter);
 router.use(subOrderRouter);
 
@@ -102,6 +111,15 @@ router.use('/api/inventory', inventoryEnhancedRouter);
 
 // Amazon-style Product Approval Workflow
 router.use('/api/approvals', approvalRouter);
+
+// Phase 2: Seller Payment System
+router.use('/api/seller', sellerPaymentRouter);
+
+// Stripe Payment System
+router.use('/api/stripe', stripePaymentRouter);
+
+// Wishlist System
+router.use('/api/wishlist', wishlistRouter);
 
 // Export the router
 module.exports = router;

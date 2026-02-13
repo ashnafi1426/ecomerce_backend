@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, optionalAuthenticate } = require('../../middlewares/auth.middleware');
+const { requireAdmin } = require('../../middlewares/role.middleware');
 
 // Import payment controller functions
 // Note: These are ES6 modules, so we need to use dynamic import
@@ -10,6 +11,10 @@ let paymentController;
 (async () => {
   paymentController = await import('../../controllers/paymentControllers/payment.controller.js');
 })();
+
+// ============================================
+// CUSTOMER/GUEST PAYMENT ROUTES
+// ============================================
 
 // Create payment intent (can be guest or authenticated)
 // Use optionalAuthenticate to attach user if logged in, but allow guests
@@ -43,6 +48,34 @@ router.post('/api/payments/:paymentIntentId/cancel', authenticate, async (req, r
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
   return paymentController.cancelPayment(req, res);
+});
+
+// ============================================
+// ADMIN PAYMENT ROUTES
+// ============================================
+
+// Get all payments (admin only)
+router.get('/api/admin/payments', authenticate, requireAdmin, async (req, res) => {
+  if (!paymentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return paymentController.getAllPayments(req, res);
+});
+
+// Get payment statistics (admin only)
+router.get('/api/admin/payments/statistics', authenticate, requireAdmin, async (req, res) => {
+  if (!paymentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return paymentController.getPaymentStatistics(req, res);
+});
+
+// Process refund (admin only)
+router.post('/api/admin/payments/:id/refund', authenticate, requireAdmin, async (req, res) => {
+  if (!paymentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return paymentController.processRefund(req, res);
 });
 
 module.exports = router;

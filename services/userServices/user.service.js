@@ -115,7 +115,7 @@ const updateStatus = async (id, status) => {
 };
 
 /**
- * Get all users (admin only)
+ * Get all users (admin only) with enhanced search and pagination
  * @param {Object} filters - Filter options
  * @returns {Promise<Array>} Array of user objects
  */
@@ -123,22 +123,27 @@ const findAll = async (filters = {}) => {
   let query = supabase
     .from('users')
     .select('id, email, role, display_name, phone, created_at, last_login_at, status')
-    .order('created_at', { ascending: false });
+    .order(filters.sortBy || 'created_at', { ascending: filters.sortOrder === 'asc' });
 
-  if (filters.role) {
+  // Apply role filter
+  if (filters.role && filters.role !== 'all') {
     query = query.eq('role', filters.role);
   }
 
-  if (filters.status) {
+  // Apply status filter
+  if (filters.status && filters.status !== 'all') {
     query = query.eq('status', filters.status);
   }
 
-  if (filters.limit) {
-    query = query.limit(filters.limit);
+  // Apply search filter
+  if (filters.search) {
+    query = query.or(`email.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%`);
   }
 
-  if (filters.offset) {
-    query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
+  // Apply pagination
+  if (filters.limit && filters.limit > 0) {
+    const offset = filters.offset || 0;
+    query = query.range(offset, offset + filters.limit - 1);
   }
 
   const { data, error } = await query;
@@ -146,6 +151,95 @@ const findAll = async (filters = {}) => {
   if (error) throw error;
   
   return data || [];
+};
+
+/**
+ * Get total count of users matching filters
+ * @param {Object} filters - Filter options
+ * @returns {Promise<Number>} Total count
+ */
+const getTotalCount = async (filters = {}) => {
+  let query = supabase
+    .from('users')
+    .select('*', { count: 'exact', head: true });
+
+  // Apply role filter
+  if (filters.role && filters.role !== 'all') {
+    query = query.eq('role', filters.role);
+  }
+
+  // Apply status filter
+  if (filters.status && filters.status !== 'all') {
+    query = query.eq('status', filters.status);
+  }
+
+  // Apply search filter
+  if (filters.search) {
+    query = query.or(`email.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%`);
+  }
+
+  const { count, error } = await query;
+  
+  if (error) throw error;
+  
+  return count || 0;
+};
+
+/**
+ * Bulk update users
+ * @param {Array} userIds - Array of user IDs
+ * @param {Object} updates - Updates to apply
+ * @returns {Promise<Array>} Updated users
+ */
+const bulkUpdate = async (userIds, updates) => {
+  const results = [];
+  
+  for (const userId of userIds) {
+    try {
+      const user = await update(userId, updates);
+      results.push({ id: userId, success: true, user });
+    } catch (error) {
+      results.push({ id: userId, success: false, error: error.message });
+    }
+  }
+  
+  return results;
+};
+
+/**
+ * Export users to CSV format
+ * @param {Array} users - Array of user objects
+ * @returns {Promise<String>} CSV string
+ */
+const exportToCSV = async (users) => {
+  const headers = [
+    'ID',
+    'Email',
+    'Display Name',
+    'Role',
+    'Status',
+    'Phone',
+    'Created At',
+    'Last Login'
+  ];
+
+  const csvRows = [headers.join(',')];
+
+  for (const user of users) {
+    const row = [
+      user.id,
+      `"${user.email}"`,
+      `"${user.display_name || ''}"`,
+      user.role,
+      user.status,
+      `"${user.phone || ''}"`,
+      user.created_at,
+      user.last_login_at || ''
+    ];
+    csvRows.push(row.join(','));
+  }
+
+  return csvRows.join('\n');
 };
 
 /**
@@ -303,11 +397,11 @@ const findAllSellers = async (filters = {}) => {
     .eq('role', 'seller')
     .order('created_at', { ascending: false });
 
-  if (filters.verificationStatus) {
+  if (filters.verificationStatus && filters.verificationStatus !== 'all') {
     query = query.eq('verification_status', filters.verificationStatus);
   }
 
-  if (filters.status) {
+  if (filters.status && filters.status !== 'all') {
     query = query.eq('status', filters.status);
   }
 
@@ -338,7 +432,7 @@ const findAllManagers = async (filters = {}) => {
     .eq('role', 'manager')
     .order('created_at', { ascending: false });
 
-  if (filters.status) {
+  if (filters.status && filters.status !== 'all') {
     query = query.eq('status', filters.status);
   }
 
@@ -386,6 +480,9 @@ module.exports = {
   update,
   updateStatus,
   findAll,
+  getTotalCount,
+  bulkUpdate,
+  exportToCSV,
   deleteUser,
   getStatistics,
   search,

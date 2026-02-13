@@ -21,7 +21,7 @@ const { loginAttemptLimiter } = require('../../middlewares/rateLimiter.middlewar
 
 // Public routes (with validation)
 router.post(
-  '/api/auth/register',
+  '/register',
   sanitizeInput,
   validateRegistration,
   authController.register
@@ -29,13 +29,13 @@ router.post(
 
 // Phase 2: Seller registration
 router.post(
-  '/api/auth/register/seller',
+  '/register/seller',
   sanitizeInput,
   authController.registerSeller
 );
 
 router.post(
-  '/api/auth/login',
+  '/login',
   loginAttemptLimiter,
   sanitizeInput,
   validateLogin,
@@ -43,10 +43,10 @@ router.post(
 );
 
 // Protected routes (require authentication)
-router.get('/api/auth/me', authenticate, authController.getProfile);
+router.get('/me', authenticate, authController.getProfile);
 
 router.put(
-  '/api/auth/profile',
+  '/profile',
   authenticate,
   sanitizeInput,
   validateProfileUpdate,
@@ -54,6 +54,6 @@ router.put(
 );
 
 // Phase 2: Seller status check
-router.get('/api/auth/seller/status', authenticate, authController.getSellerStatus);
+router.get('/seller/status', authenticate, authController.getSellerStatus);
 
 module.exports = router;

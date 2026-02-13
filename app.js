@@ -58,21 +58,8 @@ app.use('/api/', limiter);
 // ============================================
 // CORS CONFIGURATION
 // ============================================
-
-// CORS - Allow frontend to call backend
-app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:3000",
-    process.env.FRONTEND_URL
-  ].filter(Boolean), // Remove undefined values
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-access-token"],
-  credentials: true,
-  maxAge: 86400 // 24 hours
-}));
+//Allowed any route
+app.use(cors());
 
 // ============================================
 // BODY PARSING & LOGGING
