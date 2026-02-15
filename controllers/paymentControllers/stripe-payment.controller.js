@@ -1,5 +1,7 @@
 const supabase = require('../../config/supabase.js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const notificationService = require('../../services/notificationServices/notification.service.js');
+const { notifySellers } = require('../../services/orderServices/order-splitting-with-email.service.js');
 
 /**
  * STRIPE PAYMENT CONTROLLER - COMPLETE IMPLEMENTATION
@@ -282,10 +284,77 @@ const createOrderAfterPayment = async (req, res) => {
       })
       .eq('id', paymentRecord.id);
 
+    // Create notification for customer about order placement
+    try {
+      // Only create notification for registered users (not guests)
+      if (userId) {
+        await notificationService.createNotification({
+          user_id: userId,
+          type: 'order_placed',
+          title: 'Order Placed Successfully',
+          message: `Your order #${order.id.substring(0, 8)} has been placed successfully`,
+          priority: 'high',
+          metadata: { 
+            order_id: order.id,
+            amount: paymentRecord.amount / 100,
+            items_count: paymentRecord.metadata.items.length
+          },
+          action_url: `/orders/${order.id}`,
+          action_text: 'View Order',
+          channels: ['in_app', 'email']
+        });
+        console.log(`[Order Creation] Customer notification created for order ${order.id}`);
+      } else {
+        console.log(`[Order Creation] Skipping notification for guest order ${order.id}`);
+      }
+    } catch (notifError) {
+      console.error('[Order Creation] Error creating customer notification:', notifError);
+      // Don't fail order creation if notification fails
+    }
+
     // Split order by sellers and create earnings
     const splitResult = await splitOrderBySellers(order.id, paymentRecord.metadata.items);
 
     console.log('[Order Creation] Order splitting result:', splitResult);
+
+    // Check if splitting failed
+    if (!splitResult.success) {
+      console.error('[Order Creation] ⚠️  Order splitting failed:', splitResult.error);
+      // Still return success for the order, but include warning
+      return res.json({
+        success: true,
+        order_id: order.id,
+        payment_status: 'succeeded',
+        warning: 'Order created but earnings tracking failed',
+        split_error: splitResult.error
+      });
+    }
+
+    // Notify sellers about new orders (in-app + email)
+    try {
+      // Get sub-orders with seller information
+      const { data: subOrders } = await supabase
+        .from('sub_orders')
+        .select('id, seller_id, items, subtotal, total_amount')
+        .eq('parent_order_id', order.id);
+
+      if (subOrders && subOrders.length > 0) {
+        // Format sub-orders for notification
+        const formattedSubOrders = subOrders.map(so => ({
+          sub_order_id: so.id,
+          seller_id: so.seller_id,
+          item_count: so.items?.length || 0,
+          subtotal: so.total_amount / 100, // Convert cents to dollars
+          items: so.items || []
+        }));
+
+        await notifySellers(formattedSubOrders, order.id);
+        console.log(`[Order Creation] Seller notifications sent for ${subOrders.length} seller(s)`);
+      }
+    } catch (notifError) {
+      console.error('[Order Creation] Error notifying sellers:', notifError);
+      // Don't fail order creation if notification fails
+    }
 
     // Update inventory (reduce stock)
     await updateInventoryAfterPurchase(paymentRecord.metadata.items);
@@ -369,6 +438,7 @@ const splitOrderBySellers = async (orderId, orderItems) => {
           seller_id: sellerId,
           items: sellerItems,
           subtotal: subtotalCents,
+          total_amount: subtotalCents,
           commission_rate: commission.commission_rate,
           commission_amount: commission.commission_amount,
           seller_payout: commission.net_amount,
@@ -378,16 +448,20 @@ const splitOrderBySellers = async (orderId, orderItems) => {
         .select()
         .single();
       
+      // CRITICAL FIX: Throw error instead of continue
       if (subOrderError) {
-        console.error('[Order Splitting] Error creating sub-order:', subOrderError);
-        continue;
+        console.error('[Order Splitting] ❌ Error creating sub-order:', subOrderError);
+        throw new Error(`Failed to create sub-order for seller ${sellerId}: ${subOrderError.message}`);
       }
+      
+      console.log(`[Order Splitting] ✅ Created sub-order ${subOrder.id} for seller ${sellerId}`);
       
       // Create seller earnings record
       const availableDate = new Date();
       availableDate.setDate(availableDate.getDate() + 7); // 7 days holding period
       
-      const { error: earningsError } = await supabase
+      // CRITICAL FIX: Get the created record with .select().single()
+      const { data: earning, error: earningsError } = await supabase
         .from('seller_earnings')
         .insert([{
           seller_id: sellerId,
@@ -399,26 +473,33 @@ const splitOrderBySellers = async (orderId, orderItems) => {
           commission_rate: commission.commission_rate,
           status: 'pending',
           available_date: availableDate.toISOString().split('T')[0]
-        }]);
+        }])
+        .select()
+        .single();
       
+      // CRITICAL FIX: Throw error instead of just logging
       if (earningsError) {
-        console.error('[Order Splitting] Error creating earnings:', earningsError);
+        console.error('[Order Splitting] ❌ Error creating earnings:', earningsError);
+        throw new Error(`Failed to create earnings for seller ${sellerId}: ${earningsError.message}`);
       }
       
       subOrders.push(subOrder);
       
-      console.log(`[Order Splitting] Created sub-order for seller ${sellerId}: $${(subtotalCents/100).toFixed(2)} (net: $${(commission.net_amount/100).toFixed(2)})`);
+      console.log(`[Order Splitting] ✅ Created earnings ${earning.id} for seller ${sellerId}: $${(subtotalCents/100).toFixed(2)} (net: $${(commission.net_amount/100).toFixed(2)})`);
     }
+    
+    console.log(`[Order Splitting] ✅ Complete: ${subOrders.length} sub-orders, ${subOrders.length} earnings created`);
     
     return {
       success: true,
       sellers_count: sellerIds.length,
       sub_orders: subOrders.length,
+      earnings_created: subOrders.length,
       is_multi_vendor: sellerIds.length > 1
     };
     
   } catch (error) {
-    console.error('[Order Splitting] Error:', error);
+    console.error('[Order Splitting] ❌ Fatal error:', error);
     return {
       success: false,
       error: error.message
@@ -583,10 +664,60 @@ const getPaymentStatus = async (req, res) => {
   }
 };
 
+/**
+ * Process Earnings Availability (Admin Endpoint)
+ * POST /api/stripe/admin/process-earnings
+ * 
+ * Makes pending earnings available for payout after holding period
+ */
+const processEarningsAvailabilityEndpoint = async (req, res) => {
+  try {
+    console.log('[Process Earnings] Admin triggered earnings processing');
+    
+    const currentDate = new Date().toISOString().split('T')[0];
+    
+    // Update earnings that have passed their holding period
+    const { data: updatedEarnings, error } = await supabase
+      .from('seller_earnings')
+      .update({ status: 'available' })
+      .eq('status', 'pending')
+      .lte('available_date', currentDate)
+      .select();
+    
+    if (error) {
+      console.error('[Process Earnings] ❌ Error updating earnings:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to process earnings',
+        details: error.message
+      });
+    }
+    
+    const count = updatedEarnings?.length || 0;
+    console.log(`[Process Earnings] ✅ Made ${count} earnings available for payout`);
+    
+    res.json({
+      success: true,
+      message: `Successfully processed ${count} earnings`,
+      count: count,
+      updated_earnings: updatedEarnings
+    });
+    
+  } catch (error) {
+    console.error('[Process Earnings] ❌ Error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process earnings availability',
+      details: error.message
+    });
+  }
+};
+
 module.exports = {
   createPaymentIntent,
   createOrderAfterPayment,
   getPaymentStatus,
   processRefund,
-  processEarningsAvailability
+  processEarningsAvailability,
+  processEarningsAvailabilityEndpoint
 };

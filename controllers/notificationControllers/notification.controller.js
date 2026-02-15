@@ -1,150 +1,292 @@
-/**
- * NOTIFICATION CONTROLLER
- * 
- * Handles HTTP requests for notification operations.
- */
-
 const notificationService = require('../../services/notificationServices/notification.service');
 
 /**
- * Get user notifications
+ * Notification Controller
+ * Handles HTTP requests for notification operations
  */
-const getUserNotifications = async (req, res, next) => {
+
+/**
+ * Get user notifications
+ * GET /api/notifications
+ */
+async function getNotifications(req, res) {
   try {
     const userId = req.user.id;
-    const { isRead, type, priority, limit } = req.query;
-    
-    const filters = {};
-    if (isRead !== undefined) filters.isRead = isRead === 'true';
-    if (type) filters.type = type;
-    if (priority) filters.priority = priority;
-    if (limit) filters.limit = parseInt(limit);
-    
-    const notifications = await notificationService.getUserNotifications(userId, filters);
-    
+    const {
+      limit = 50,
+      offset = 0,
+      unreadOnly = false,
+      type,
+      priority,
+      includeArchived = false
+    } = req.query;
+
+    const result = await notificationService.getUserNotifications(userId, {
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      unreadOnly: unreadOnly === 'true',
+      type,
+      priority,
+      includeArchived: includeArchived === 'true'
+    });
+
     res.status(200).json({
       success: true,
-      count: notifications.length,
-      notifications
+      data: result
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] Error getting notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notifications',
+      error: error.message
+    });
   }
-};
+}
 
 /**
  * Get unread notification count
+ * GET /api/notifications/unread-count
  */
-const getUnreadCount = async (req, res, next) => {
+async function getUnreadCount(req, res) {
   try {
     const userId = req.user.id;
-    
     const count = await notificationService.getUnreadCount(userId);
-    
+
     res.status(200).json({
       success: true,
-      count
+      data: { count }
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] Error getting unread count:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch unread count',
+      error: error.message
+    });
   }
-};
+}
 
 /**
  * Mark notification as read
+ * PATCH /api/notifications/:id/read
  */
-const markAsRead = async (req, res, next) => {
+async function markAsRead(req, res) {
   try {
-    const { notificationId } = req.params;
     const userId = req.user.id;
-    
-    const notification = await notificationService.markAsRead(notificationId, userId);
-    
+    const { id } = req.params;
+
+    const notification = await notificationService.markAsRead(id, userId);
+
     res.status(200).json({
       success: true,
       message: 'Notification marked as read',
-      notification
+      data: notification
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] Error marking as read:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark notification as read',
+      error: error.message
+    });
   }
-};
+}
+
+/**
+ * Mark notification as unread
+ * PATCH /api/notifications/:id/unread
+ */
+async function markAsUnread(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const notification = await notificationService.markAsUnread(id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification marked as unread',
+      data: notification
+    });
+  } catch (error) {
+    console.error('[Notification Controller] Error marking as unread:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark notification as unread',
+      error: error.message
+    });
+  }
+}
 
 /**
  * Mark all notifications as read
+ * POST /api/notifications/mark-all-read
  */
-const markAllAsRead = async (req, res, next) => {
+async function markAllAsRead(req, res) {
   try {
     const userId = req.user.id;
-    
     const count = await notificationService.markAllAsRead(userId);
-    
+
     res.status(200).json({
       success: true,
       message: `${count} notifications marked as read`,
-      count
+      data: { count }
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] Error marking all as read:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark all notifications as read',
+      error: error.message
+    });
   }
-};
+}
+
+/**
+ * Archive notification
+ * PATCH /api/notifications/:id/archive
+ */
+async function archiveNotification(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const notification = await notificationService.archiveNotification(id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification archived',
+      data: notification
+    });
+  } catch (error) {
+    console.error('[Notification Controller] Error archiving notification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to archive notification',
+      error: error.message
+    });
+  }
+}
 
 /**
  * Delete notification
+ * DELETE /api/notifications/:id
  */
-const deleteNotification = async (req, res, next) => {
+async function deleteNotification(req, res) {
   try {
-    const { notificationId } = req.params;
     const userId = req.user.id;
-    
-    await notificationService.deleteNotification(notificationId, userId);
-    
+    const { id } = req.params;
+
+    await notificationService.deleteNotification(id, userId);
+
     res.status(200).json({
       success: true,
       message: 'Notification deleted'
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] Error deleting notification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete notification',
+      error: error.message
+    });
   }
-};
+}
 
 /**
- * Create notification (admin only)
+ * Get notification preferences
+ * GET /api/notifications/preferences
  */
-const createNotification = async (req, res, next) => {
+async function getPreferences(req, res) {
   try {
-    const { userId, type, title, message, data, priority } = req.body;
-    
-    if (!userId || !type || !title || !message) {
-      return res.status(400).json({
-        success: false,
-        message: 'User ID, type, title, and message are required'
-      });
-    }
-    
-    const notification = await notificationService.createNotification(userId, {
-      type,
-      title,
-      message,
-      data,
-      priority
-    });
-    
-    res.status(201).json({
+    const userId = req.user.id;
+    const preferences = await notificationService.getPreferences(userId);
+
+    res.status(200).json({
       success: true,
-      message: 'Notification created',
-      notification
+      data: preferences
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] Error getting preferences:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notification preferences',
+      error: error.message
+    });
   }
-};
+}
+
+/**
+ * Update notification preferences
+ * PUT /api/notifications/preferences
+ */
+async function updatePreferences(req, res) {
+  try {
+    const userId = req.user.id;
+    const preferences = req.body;
+
+    const updated = await notificationService.updatePreferences(userId, preferences);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification preferences updated',
+      data: updated
+    });
+  } catch (error) {
+    console.error('[Notification Controller] Error updating preferences:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update notification preferences',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Create test notification (for development/testing)
+ * POST /api/notifications/test
+ */
+async function createTestNotification(req, res) {
+  try {
+    const userId = req.user.id;
+    
+    const notification = await notificationService.createNotification({
+      user_id: userId,
+      type: 'system_announcement',
+      title: 'Test Notification',
+      message: 'This is a test notification from the system.',
+      priority: 'medium',
+      metadata: { test: true },
+      action_url: '/dashboard',
+      action_text: 'Go to Dashboard',
+      channels: ['in_app']
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Test notification created',
+      data: notification
+    });
+  } catch (error) {
+    console.error('[Notification Controller] Error creating test notification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create test notification',
+      error: error.message
+    });
+  }
+}
 
 module.exports = {
-  getUserNotifications,
+  getNotifications,
   getUnreadCount,
   markAsRead,
+  markAsUnread,
   markAllAsRead,
+  archiveNotification,
   deleteNotification,
-  createNotification
+  getPreferences,
+  updatePreferences,
+  createTestNotification
 };

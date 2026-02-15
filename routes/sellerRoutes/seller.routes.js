@@ -7,6 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const sellerController = require('../../controllers/sellerControllers/seller.controller');
+const sellerOrderController = require('../../controllers/sellerControllers/seller-order.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireSeller, requireAnyRole } = require('../../middlewares/role.middleware');
 
@@ -119,56 +120,18 @@ router.get('/api/seller/sub-orders', authenticate, requireSeller, async (req, re
   }
 });
 
-// Alias for /api/seller/orders (redirect to sub-orders)
-router.get('/api/seller/orders', authenticate, requireSeller, async (req, res, next) => {
-  try {
-    const sellerId = req.user.id;
-    const { limit, sort, fulfillment_status } = req.query;
-    const supabase = require('../../config/supabase');
-    
-    let query = supabase
-      .from('sub_orders')
-      .select(`
-        *,
-        orders!inner (
-          id,
-          created_at,
-          shipping_address,
-          status
-        )
-      `)
-      .eq('seller_id', sellerId);
-    
-    if (fulfillment_status) {
-      query = query.eq('fulfillment_status', fulfillment_status);
-    }
-    
-    // Handle sorting
-    if (sort) {
-      const isDescending = sort.startsWith('-');
-      const field = isDescending ? sort.substring(1) : sort;
-      query = query.order(field === 'createdAt' ? 'created_at' : field, { ascending: !isDescending });
-    } else {
-      query = query.order('created_at', { ascending: false });
-    }
-    
-    if (limit) {
-      query = query.limit(parseInt(limit));
-    }
-    
-    const { data: subOrders, error } = await query;
-    
-    if (error) throw error;
-    
-    res.status(200).json({
-      success: true,
-      count: subOrders?.length || 0,
-      orders: subOrders || []
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+// ===== SELLER ORDER MANAGEMENT ROUTES (Phase 1) =====
+// Get all orders for seller
+router.get('/api/seller/orders', authenticate, requireSeller, sellerOrderController.getOrders);
+
+// Get single order details
+router.get('/api/seller/orders/:id', authenticate, requireSeller, sellerOrderController.getOrderById);
+
+// Update order status
+router.put('/api/seller/orders/:id/status', authenticate, requireSeller, sellerOrderController.updateOrderStatus);
+
+// Add shipping information
+router.put('/api/seller/orders/:id/shipping', authenticate, requireSeller, sellerOrderController.addShippingInfo);
 
 // Seller documents (seller only)
 router.post('/api/seller/documents', authenticate, requireSeller, sellerController.uploadDocument);

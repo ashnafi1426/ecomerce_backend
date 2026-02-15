@@ -86,7 +86,34 @@ const getOrderById = async (req, res, next) => {
       });
     }
 
-    res.json(order);
+    // Transform basket to items array for frontend compatibility
+    let items = [];
+    if (Array.isArray(order.basket)) {
+      items = order.basket.map(item => ({
+        id: item.product_id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        price: item.price,
+        product: {
+          id: item.product_id,
+          name: item.title,
+          title: item.title,
+          image_url: item.image_url,
+          emoji: '📦'
+        }
+      }));
+    }
+
+    // Return order with consistent structure
+    res.json({
+      success: true,
+      data: {
+        ...order,
+        items: items,
+        total: order.amount / 100, // Convert cents to dollars
+        shippingAddress: order.shipping_address
+      }
+    });
   } catch (error) {
     next(error);
   }

@@ -560,13 +560,25 @@ const getAllUsers = async (req, res, next) => {
       sortOrder = 'desc'
     } = req.query;
 
+    // Map frontend sort values to database columns
+    const sortByMap = {
+      'recent': 'created_at',
+      'orders': 'created_at', // TODO: Add order count when available
+      'spend': 'created_at',  // TODO: Add total spend when available
+      'created_at': 'created_at',
+      'email': 'email',
+      'name': 'display_name'
+    };
+
+    const dbSortBy = sortByMap[sortBy] || 'created_at';
+
     const users = await userService.findAll({
       role,
       status,
       search,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      sortBy,
+      sortBy: dbSortBy,
       sortOrder
     });
 

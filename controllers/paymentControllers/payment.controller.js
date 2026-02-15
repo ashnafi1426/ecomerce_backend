@@ -1,6 +1,7 @@
 import { stripe, stripeConfig } from '../../config/stripe.js';
 import supabase from '../../config/supabase.js';
 import { splitOrderBySeller, notifySellers } from '../../services/orderServices/order-splitting-with-email.service.js';
+import notificationService from '../../services/notificationServices/notification.service.js';
 
 /**
  * FASTSHOP PAYMENT CONTROLLER - COMPLETE IMPLEMENTATION
@@ -457,6 +458,34 @@ export const createOrderAfterPayment = async (req, res) => {
 
     if (updateError) {
       console.error('Error updating payment:', updateError);
+    }
+
+    // 7.5. Create notification for customer about order placement
+    try {
+      // Only create notification for registered users (not guests)
+      if (userId) {
+        await notificationService.createNotification({
+          user_id: userId,
+          type: 'order_placed',
+          title: 'Order Placed Successfully',
+          message: `Your order #${orderId.substring(0, 8)} has been placed successfully`,
+          priority: 'high',
+          metadata: { 
+            order_id: orderId,
+            amount: paymentIntent.amount / 100,
+            items_count: orderItems.length
+          },
+          action_url: `/orders/${orderId}`,
+          action_text: 'View Order',
+          channels: ['in_app', 'email']
+        });
+        console.log(`[Payment] Customer notification created for order ${orderId}`);
+      } else {
+        console.log(`[Payment] Skipping notification for guest order ${orderId}`);
+      }
+    } catch (notifError) {
+      console.error('[Payment] Error creating customer notification:', notifError);
+      // Don't fail order creation if notification fails
     }
 
     // 8. PHASE 3: Split order by seller if multi-vendor

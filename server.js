@@ -46,6 +46,21 @@ const server = app.listen(PORT, () => {
 });
 
 // ============================================
+// SOCKET.IO INITIALIZATION
+// ============================================
+
+const { initializeSocketServer } = require('./socket/socket.config');
+const { initializeChatHandlers } = require('./socket/chat.handler');
+
+// Initialize Socket.IO server
+const io = initializeSocketServer(server);
+
+// Initialize chat event handlers
+initializeChatHandlers(io);
+
+console.log('💬 Socket.IO chat system initialized');
+
+// ============================================
 // GRACEFUL SHUTDOWN
 // ============================================
 

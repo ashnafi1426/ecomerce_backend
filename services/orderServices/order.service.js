@@ -368,11 +368,117 @@ const createFromCart = async (userId, orderData) => {
   // Clear cart after successful order creation
   await cartService.clearCart(userId);
   
+  // Create seller earnings records
+  try {
+    await createSellerEarnings(data.id, basket);
+    console.log('[Order Service] Seller earnings created successfully for order:', data.id);
+  } catch (earningsError) {
+    console.error('[Order Service] Failed to create seller earnings:', earningsError);
+    // Don't fail the order creation, but log the error
+    // Admin can manually create earnings later if needed
+  }
+  
   // Return order with discount breakdown
   return {
     ...data,
     discount_breakdown: discountResult.breakdown
   };
+};
+
+/**
+ * Create seller earnings records for an order
+ * @param {String} orderId - Order UUID
+ * @param {Array} orderItems - Array of order items with seller info
+ * @returns {Promise<Array>} Created earnings records
+ */
+const createSellerEarnings = async (orderId, orderItems) => {
+  try {
+    console.log('[Order Service] Creating seller earnings for order:', orderId);
+    
+    // Group items by seller
+    const sellerItems = {};
+    for (const item of orderItems) {
+      const sellerId = item.seller_id;
+      if (!sellerId) continue; // Skip items without seller_id
+      
+      if (!sellerItems[sellerId]) {
+        sellerItems[sellerId] = [];
+      }
+      sellerItems[sellerId].push(item);
+    }
+
+    // Get commission settings
+    const { data: commissionSettings, error: commissionError } = await supabase
+      .from('commission_settings')
+      .select('*')
+      .single();
+
+    if (commissionError) {
+      console.error('[Order Service] Error fetching commission settings:', commissionError);
+      // Use default commission rate if settings not found
+      var defaultRate = 10;
+    } else {
+      var defaultRate = commissionSettings.default_rate || 10;
+    }
+
+    const earningsRecords = [];
+
+    // Create earnings record for each seller
+    for (const [sellerId, items] of Object.entries(sellerItems)) {
+      // Calculate gross amount (total price of all items from this seller)
+      let grossAmount = 0;
+      for (const item of items) {
+        grossAmount += item.price * item.quantity;
+      }
+
+      // Convert to cents for database storage
+      const grossAmountCents = Math.round(grossAmount * 100);
+
+      // Calculate commission based on commission settings
+      let commissionRate = defaultRate;
+      
+      // Check if seller has custom commission rate
+      if (commissionSettings && commissionSettings.seller_rates && commissionSettings.seller_rates[sellerId]) {
+        commissionRate = commissionSettings.seller_rates[sellerId];
+      }
+
+      const commissionAmountCents = Math.round(grossAmountCents * (commissionRate / 100));
+      const netAmountCents = grossAmountCents - commissionAmountCents;
+
+      // Calculate available date (7 days from now)
+      const availableDate = new Date();
+      availableDate.setDate(availableDate.getDate() + 7);
+
+      // Create seller_earnings record
+      const { data: earning, error: earningError } = await supabase
+        .from('seller_earnings')
+        .insert({
+          seller_id: sellerId,
+          order_id: orderId,
+          gross_amount: grossAmountCents, // Amount in cents
+          commission_amount: commissionAmountCents, // Amount in cents
+          commission_rate: commissionRate,
+          net_amount: netAmountCents, // Amount in cents
+          status: 'pending', // Will become 'available' after 7 days
+          available_date: availableDate.toISOString()
+        })
+        .select()
+        .single();
+
+      if (earningError) {
+        console.error('[Order Service] Error creating seller earning:', earningError);
+        throw new Error(`Failed to create seller earning for seller ${sellerId}`);
+      }
+
+      console.log('[Order Service] Created earning record:', earning.id, 'for seller:', sellerId);
+      earningsRecords.push(earning);
+    }
+
+    return earningsRecords;
+  } catch (error) {
+    console.error('[Order Service] Error in createSellerEarnings:', error);
+    throw error;
+  }
 };
 
 /**
@@ -413,11 +519,14 @@ const updateStatus = async (id, newStatus, adminId = null) => {
     throw new Error('Order not found');
   }
 
+  const oldStatus = order.status;
+
   // Validate status transition
   const validTransitions = {
     'pending_payment': ['paid', 'cancelled'],
-    'paid': ['confirmed', 'cancelled'],
-    'confirmed': ['packed', 'cancelled'],
+    'paid': ['confirmed', 'processing', 'cancelled'],
+    'confirmed': ['packed', 'processing', 'shipped', 'cancelled'],
+    'processing': ['packed', 'shipped', 'cancelled'],
     'packed': ['shipped', 'cancelled'],
     'shipped': ['delivered', 'cancelled'],
     'delivered': [],
@@ -477,6 +586,15 @@ const updateStatus = async (id, newStatus, adminId = null) => {
     .single();
   
   if (error) throw error;
+  
+  // Create notification for status change
+  try {
+    const orderNotificationService = require('../notificationServices/order-notification.service');
+    await orderNotificationService.notifyOrderStatusChange(data, oldStatus, newStatus);
+  } catch (notifError) {
+    console.error('[Order Service] Failed to create notification:', notifError);
+    // Don't fail the status update if notification fails
+  }
   
   return data;
 };
@@ -918,6 +1036,7 @@ module.exports = {
   findAll,
   create,
   createFromCart,
+  createSellerEarnings, // NEW: Export earnings creation function
   updateStatus,
   cancelOrder,
   generateInvoice,

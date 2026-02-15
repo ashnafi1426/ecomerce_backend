@@ -1,426 +1,463 @@
+const supabase = require('../../config/supabase');
+const emailService = require('../emailServices/email.service');
+
 /**
- * NOTIFICATION SERVICE
- * 
- * Handles in-app notifications for all users.
- * Supports different notification types and priorities.
+ * Notification Service
+ * Handles all notification-related business logic
  */
 
-const supabase = require('../../config/supabase');
-
 /**
- * Create notification
- * 
- * @param {String} userId - User UUID
- * @param {Object} notificationData - Notification data
+ * Create a new notification
+ * @param {Object} notificationData - Notification details
  * @returns {Promise<Object>} Created notification
  */
-const createNotification = async (userId, notificationData) => {
-  const { data, error } = await supabase
-    .from('notifications')
-    .insert([{
-      user_id: userId,
-      notification_type: notificationData.type,
-      title: notificationData.title,
-      message: notificationData.message,
-      related_entity_type: notificationData.entityType || null,
-      related_entity_id: notificationData.entityId || null,
-      priority: notificationData.priority || 'normal'
-    }])
-    .select()
-    .single();
-  
-  if (error) throw error;
-  
-  return data;
-};
+async function createNotification(notificationData) {
+  try {
+    const {
+      user_id,
+      type,
+      title,
+      message,
+      priority = 'medium',
+      metadata = {},
+      action_url = null,
+      action_text = null,
+      channels = ['in_app'],
+      expires_at = null
+    } = notificationData;
+
+    // Validate required fields
+    if (!user_id || !type || !title || !message) {
+      throw new Error('Missing required notification fields');
+    }
+
+    // Create in-app notification
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id,
+        type,
+        title,
+        message,
+        priority,
+        metadata,
+        action_url,
+        action_text,
+        channels,
+        expires_at
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    console.log(`[Notification] ✅ Created in-app notification ${data.id} for user ${user_id}`);
+    
+    // Send email if email channel is enabled
+    if (channels.includes('email')) {
+      try {
+        // Get user email
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('email, display_name')
+          .eq('id', user_id)
+          .single();
+
+        if (!userError && userData && userData.email) {
+          await emailService.sendCustomerOrderStatusEmail({
+            email: userData.email,
+            display_name: userData.display_name,
+            title,
+            message,
+            action_url,
+            action_text,
+            metadata,
+            type
+          });
+          console.log(`[Notification] ✅ Sent email notification to ${userData.email}`);
+        }
+      } catch (emailError) {
+        console.error('[Notification] ⚠️ Failed to send email (non-critical):', emailError.message);
+        // Don't throw - email failure shouldn't break notification creation
+      }
+    }
+    
+    // TODO: Trigger real-time notification via WebSocket
+    // TODO: Send SMS if SMS channel is enabled
+
+    return data;
+  } catch (error) {
+    console.error('[Notification Service] Error creating notification:', error);
+    throw error;
+  }
+}
 
 /**
- * Get user notifications
- * 
- * @param {String} userId - User UUID
- * @param {Object} filters - Filter options
- * @returns {Promise<Array>} Array of notifications
+ * Get notifications for a user
+ * @param {string} userId - User ID
+ * @param {Object} options - Query options
+ * @returns {Promise<Array>} List of notifications
  */
-const getUserNotifications = async (userId, filters = {}) => {
-  let query = supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  
-  if (filters.isRead !== undefined) {
-    query = query.eq('is_read', filters.isRead);
-  }
-  
-  if (filters.type) {
-    query = query.eq('type', filters.type);
-  }
-  
-  if (filters.priority) {
-    query = query.eq('priority', filters.priority);
-  }
-  
-  if (filters.limit) {
-    query = query.limit(filters.limit);
-  }
-  
-  const { data, error } = await query;
-  
-  if (error) throw error;
-  
-  return data || [];
-};
+async function getUserNotifications(userId, options = {}) {
+  try {
+    const {
+      limit = 50,
+      offset = 0,
+      unreadOnly = false,
+      type = null,
+      priority = null,
+      includeArchived = false
+    } = options;
 
-/**
- * Mark notification as read
- * 
- * @param {String} notificationId - Notification UUID
- * @param {String} userId - User UUID (for authorization)
- * @returns {Promise<Object>} Updated notification
- */
-const markAsRead = async (notificationId, userId) => {
-  const { data, error } = await supabase
-    .from('notifications')
-    .update({
-      is_read: true,
-      read_at: new Date().toISOString()
-    })
-    .eq('id', notificationId)
-    .eq('user_id', userId)
-    .select()
-    .single();
-  
-  if (error) throw error;
-  
-  return data;
-};
+    let query = supabase
+      .from('notifications')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
-/**
- * Mark all notifications as read
- * 
- * @param {String} userId - User UUID
- * @returns {Promise<Number>} Number of notifications marked as read
- */
-const markAllAsRead = async (userId) => {
-  const { data, error } = await supabase
-    .from('notifications')
-    .update({
-      is_read: true,
-      read_at: new Date().toISOString()
-    })
-    .eq('user_id', userId)
-    .eq('is_read', false)
-    .select();
-  
-  if (error) throw error;
-  
-  return data ? data.length : 0;
-};
+    // Apply filters
+    if (unreadOnly) {
+      query = query.eq('is_read', false);
+    }
 
-/**
- * Delete notification
- * 
- * @param {String} notificationId - Notification UUID
- * @param {String} userId - User UUID (for authorization)
- * @returns {Promise<Boolean>} Success status
- */
-const deleteNotification = async (notificationId, userId) => {
-  const { error } = await supabase
-    .from('notifications')
-    .delete()
-    .eq('id', notificationId)
-    .eq('user_id', userId);
-  
-  if (error) throw error;
-  
-  return true;
-};
+    if (!includeArchived) {
+      query = query.eq('is_archived', false);
+    }
+
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    if (priority) {
+      query = query.eq('priority', priority);
+    }
+
+    // Filter out expired notifications
+    query = query.or('expires_at.is.null,expires_at.gt.' + new Date().toISOString());
+
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return {
+      notifications: data || [],
+      total: count || 0,
+      limit,
+      offset
+    };
+  } catch (error) {
+    console.error('[Notification Service] Error getting notifications:', error);
+    throw error;
+  }
+}
 
 /**
  * Get unread notification count
- * 
- * @param {String} userId - User UUID
- * @returns {Promise<Number>} Count of unread notifications
+ * @param {string} userId - User ID
+ * @returns {Promise<number>} Unread count
  */
-const getUnreadCount = async (userId) => {
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('is_read', false);
-  
-  if (error) throw error;
-  
-  return count || 0;
-};
+async function getUnreadCount(userId) {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_unread_notification_count', { p_user_id: userId });
+
+    if (error) throw error;
+
+    return data || 0;
+  } catch (error) {
+    console.error('[Notification Service] Error getting unread count:', error);
+    throw error;
+  }
+}
 
 /**
- * Create bulk notifications
- * 
- * @param {Array} notifications - Array of notification objects
- * @returns {Promise<Array>} Created notifications
+ * Mark notification as read
+ * @param {string} notificationId - Notification ID
+ * @param {string} userId - User ID (for security)
+ * @returns {Promise<Object>} Updated notification
  */
-const createBulkNotifications = async (notifications) => {
-  const { data, error } = await supabase
-    .from('notifications')
-    .insert(notifications)
-    .select();
-  
-  if (error) throw error;
-  
-  return data || [];
-};
+async function markAsRead(notificationId, userId) {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .update({
+        is_read: true,
+        read_at: new Date().toISOString()
+      })
+      .eq('id', notificationId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  } catch (error) {
+    console.error('[Notification Service] Error marking as read:', error);
+    throw error;
+  }
+}
 
 /**
- * Delete old notifications (cleanup)
- * 
- * @param {Number} daysOld - Delete notifications older than this many days
- * @returns {Promise<Number>} Number of deleted notifications
+ * Mark notification as unread
+ * @param {string} notificationId - Notification ID
+ * @param {string} userId - User ID (for security)
+ * @returns {Promise<Object>} Updated notification
  */
-const deleteOldNotifications = async (daysOld = 30) => {
-  const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000).toISOString();
-  
-  const { data, error } = await supabase
-    .from('notifications')
-    .delete()
-    .lt('created_at', cutoffDate)
-    .eq('is_read', true)
-    .select();
-  
-  if (error) throw error;
-  
-  return data ? data.length : 0;
-};
+async function markAsUnread(notificationId, userId) {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .update({
+        is_read: false,
+        read_at: null
+      })
+      .eq('id', notificationId)
+      .eq('user_id', userId)
+      .select()
+      .single();
 
-// ============================================
-// CRITICAL FEATURES NOTIFICATIONS
-// ============================================
+    if (error) throw error;
+
+    return data;
+  } catch (error) {
+    console.error('[Notification Service] Error marking as unread:', error);
+    throw error;
+  }
+}
 
 /**
- * Notify customer about delivery rating submission
- * Implements Requirement 3.5
- * @param {String} customerId - Customer UUID
- * @param {String} orderId - Order UUID
- * @returns {Promise<Object>} Created notification
+ * Mark all notifications as read
+ * @param {string} userId - User ID
+ * @returns {Promise<number>} Number of notifications marked as read
  */
-const notifyDeliveryRatingSubmitted = async (customerId, orderId) => {
-  return await createNotification(customerId, {
-    type: 'new_review',
-    title: 'Delivery Rating Submitted',
-    message: 'Thank you for rating your delivery experience!',
-    entityType: 'order',
-    entityId: orderId,
-    priority: 'normal'
+async function markAllAsRead(userId) {
+  try {
+    const { data, error } = await supabase
+      .rpc('mark_all_notifications_read', { p_user_id: userId });
+
+    if (error) throw error;
+
+    return data || 0;
+  } catch (error) {
+    console.error('[Notification Service] Error marking all as read:', error);
+    throw error;
+  }
+}
+
+/**
+ * Archive notification
+ * @param {string} notificationId - Notification ID
+ * @param {string} userId - User ID (for security)
+ * @returns {Promise<Object>} Updated notification
+ */
+async function archiveNotification(notificationId, userId) {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .update({
+        is_archived: true,
+        archived_at: new Date().toISOString()
+      })
+      .eq('id', notificationId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  } catch (error) {
+    console.error('[Notification Service] Error archiving notification:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete notification
+ * @param {string} notificationId - Notification ID
+ * @param {string} userId - User ID (for security)
+ * @returns {Promise<boolean>} Success status
+ */
+async function deleteNotification(notificationId, userId) {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    return true;
+  } catch (error) {
+    console.error('[Notification Service] Error deleting notification:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get notification preferences
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} User preferences
+ */
+async function getPreferences(userId) {
+  try {
+    const { data, error } = await supabase
+      .from('notification_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      // If no preferences exist, create default ones
+      if (error.code === 'PGRST116') {
+        return await createDefaultPreferences(userId);
+      }
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('[Notification Service] Error getting preferences:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update notification preferences
+ * @param {string} userId - User ID
+ * @param {Object} preferences - Preference updates
+ * @returns {Promise<Object>} Updated preferences
+ */
+async function updatePreferences(userId, preferences) {
+  try {
+    const { data, error } = await supabase
+      .from('notification_preferences')
+      .update(preferences)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  } catch (error) {
+    console.error('[Notification Service] Error updating preferences:', error);
+    throw error;
+  }
+}
+
+/**
+ * Create default preferences for a user
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Created preferences
+ */
+async function createDefaultPreferences(userId) {
+  try {
+    const { data, error } = await supabase
+      .from('notification_preferences')
+      .insert({ user_id: userId })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  } catch (error) {
+    console.error('[Notification Service] Error creating default preferences:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete expired notifications (cleanup job)
+ * @returns {Promise<number>} Number of deleted notifications
+ */
+async function deleteExpiredNotifications() {
+  try {
+    const { data, error } = await supabase
+      .rpc('delete_expired_notifications');
+
+    if (error) throw error;
+
+    console.log(`[Notification Service] Deleted ${data} expired notifications`);
+    return data || 0;
+  } catch (error) {
+    console.error('[Notification Service] Error deleting expired notifications:', error);
+    throw error;
+  }
+}
+
+/**
+ * Helper: Create order notification
+ */
+async function notifyOrderPlaced(orderId, userId, orderDetails) {
+  return await createNotification({
+    user_id: userId,
+    type: 'order_placed',
+    title: 'Order Placed Successfully',
+    message: `Your order #${orderId.substring(0, 8)} has been placed successfully.`,
+    priority: 'high',
+    metadata: { order_id: orderId, ...orderDetails },
+    action_url: `/orders/${orderId}`,
+    action_text: 'View Order',
+    channels: ['in_app', 'email']
   });
-};
+}
 
 /**
- * Notify seller about low delivery rating
- * Implements Requirement 3.5
- * @param {String} sellerId - Seller UUID
- * @param {String} orderId - Order UUID
- * @param {Number} rating - Rating value
- * @returns {Promise<Object>} Created notification
+ * Helper: Create product approval notification
  */
-const notifySellerLowDeliveryRating = async (sellerId, orderId, rating) => {
-  return await createNotification(sellerId, {
-    type: 'new_review',
-    title: 'Low Delivery Rating Received',
-    message: `You received a ${rating}-star delivery rating. Please review your delivery process.`,
-    entityType: 'order',
-    entityId: orderId,
-    priority: 'high'
+async function notifyProductApproved(productId, sellerId, productName) {
+  return await createNotification({
+    user_id: sellerId,
+    type: 'product_approved',
+    title: 'Product Approved',
+    message: `Your product "${productName}" has been approved and is now live.`,
+    priority: 'high',
+    metadata: { product_id: productId },
+    action_url: `/seller/products/${productId}`,
+    action_text: 'View Product',
+    channels: ['in_app', 'email']
   });
-};
+}
 
 /**
- * Notify customer about replacement request received
- * Implements Requirement 4.4
- * @param {String} customerId - Customer UUID
- * @param {String} replacementId - Replacement request UUID
- * @returns {Promise<Object>} Created notification
+ * Helper: Create low stock notification
  */
-const notifyReplacementRequestReceived = async (customerId, replacementId) => {
-  return await createNotification(customerId, {
-    type: 'return_requested',
-    title: 'Replacement Request Received',
-    message: 'Your replacement request has been received and is being reviewed.',
-    entityType: 'replacement',
-    entityId: replacementId,
-    priority: 'normal'
+async function notifyLowStock(productId, sellerId, productName, currentStock) {
+  return await createNotification({
+    user_id: sellerId,
+    type: 'product_low_stock',
+    title: 'Low Stock Alert',
+    message: `Your product "${productName}" is running low on stock (${currentStock} remaining).`,
+    priority: 'medium',
+    metadata: { product_id: productId, current_stock: currentStock },
+    action_url: `/seller/inventory`,
+    action_text: 'Manage Inventory',
+    channels: ['in_app', 'email']
   });
-};
-
-/**
- * Notify customer about replacement request approval
- * Implements Requirement 4.4
- * @param {String} customerId - Customer UUID
- * @param {String} replacementId - Replacement request UUID
- * @returns {Promise<Object>} Created notification
- */
-const notifyReplacementApproved = async (customerId, replacementId) => {
-  return await createNotification(customerId, {
-    type: 'return_approved',
-    title: 'Replacement Request Approved',
-    message: 'Your replacement request has been approved. Your replacement will be shipped soon.',
-    entityType: 'replacement',
-    entityId: replacementId,
-    priority: 'high'
-  });
-};
-
-/**
- * Notify customer about replacement request rejection
- * Implements Requirement 4.4
- * @param {String} customerId - Customer UUID
- * @param {String} replacementId - Replacement request UUID
- * @param {String} reason - Rejection reason
- * @returns {Promise<Object>} Created notification
- */
-const notifyReplacementRejected = async (customerId, replacementId, reason) => {
-  return await createNotification(customerId, {
-    type: 'return_rejected',
-    title: 'Replacement Request Rejected',
-    message: `Your replacement request was rejected. Reason: ${reason}`,
-    entityType: 'replacement',
-    entityId: replacementId,
-    priority: 'high'
-  });
-};
-
-/**
- * Notify customer about replacement shipment
- * Implements Requirement 4.10
- * @param {String} customerId - Customer UUID
- * @param {String} replacementId - Replacement request UUID
- * @param {String} trackingNumber - Tracking number
- * @returns {Promise<Object>} Created notification
- */
-const notifyReplacementShipped = async (customerId, replacementId, trackingNumber) => {
-  return await createNotification(customerId, {
-    type: 'order_shipped',
-    title: 'Replacement Shipped',
-    message: `Your replacement has been shipped. Tracking: ${trackingNumber}`,
-    entityType: 'replacement',
-    entityId: replacementId,
-    priority: 'normal'
-  });
-};
-
-/**
- * Notify seller about replacement request
- * Implements Requirement 4.4
- * @param {String} sellerId - Seller UUID
- * @param {String} replacementId - Replacement request UUID
- * @param {String} productTitle - Product title
- * @returns {Promise<Object>} Created notification
- */
-const notifySellerReplacementRequest = async (sellerId, replacementId, productTitle) => {
-  return await createNotification(sellerId, {
-    type: 'return_requested',
-    title: 'New Replacement Request',
-    message: `A customer has requested a replacement for: ${productTitle}`,
-    entityType: 'replacement',
-    entityId: replacementId,
-    priority: 'high'
-  });
-};
-
-/**
- * Notify customer about refund request received
- * Implements Requirement 5.13
- * @param {String} customerId - Customer UUID
- * @param {String} refundId - Refund request UUID
- * @returns {Promise<Object>} Created notification
- */
-const notifyRefundRequestReceived = async (customerId, refundId) => {
-  return await createNotification(customerId, {
-    type: 'return_requested',
-    title: 'Refund Request Received',
-    message: 'Your refund request has been received and is being reviewed.',
-    entityType: 'refund',
-    entityId: refundId,
-    priority: 'normal'
-  });
-};
-
-/**
- * Notify customer about refund approval
- * Implements Requirement 5.13
- * @param {String} customerId - Customer UUID
- * @param {String} refundId - Refund request UUID
- * @param {Number} amount - Refund amount
- * @returns {Promise<Object>} Created notification
- */
-const notifyRefundApproved = async (customerId, refundId, amount) => {
-  return await createNotification(customerId, {
-    type: 'return_approved',
-    title: 'Refund Approved',
-    message: `Your refund of $${(amount / 100).toFixed(2)} has been approved and will be processed soon.`,
-    entityType: 'refund',
-    entityId: refundId,
-    priority: 'high'
-  });
-};
-
-/**
- * Notify customer about refund completion
- * Implements Requirement 5.21
- * @param {String} customerId - Customer UUID
- * @param {String} refundId - Refund request UUID
- * @param {Number} amount - Refund amount
- * @returns {Promise<Object>} Created notification
- */
-const notifyRefundCompleted = async (customerId, refundId, amount) => {
-  return await createNotification(customerId, {
-    type: 'refund_processed',
-    title: 'Refund Completed',
-    message: `Your refund of $${(amount / 100).toFixed(2)} has been processed successfully.`,
-    entityType: 'refund',
-    entityId: refundId,
-    priority: 'high'
-  });
-};
-
-/**
- * Notify seller about refund request
- * Implements Requirement 5.13
- * @param {String} sellerId - Seller UUID
- * @param {String} refundId - Refund request UUID
- * @param {Number} amount - Refund amount
- * @returns {Promise<Object>} Created notification
- */
-const notifySellerRefundRequest = async (sellerId, refundId, amount) => {
-  return await createNotification(sellerId, {
-    type: 'return_requested',
-    title: 'New Refund Request',
-    message: `A customer has requested a refund of $${(amount / 100).toFixed(2)}.`,
-    entityType: 'refund',
-    entityId: refundId,
-    priority: 'high'
-  });
-};
+}
 
 module.exports = {
   createNotification,
   getUserNotifications,
-  markAsRead,
-  markAllAsRead,
-  deleteNotification,
   getUnreadCount,
-  createBulkNotifications,
-  deleteOldNotifications,
-  // Critical features notifications
-  notifyDeliveryRatingSubmitted,
-  notifySellerLowDeliveryRating,
-  notifyReplacementRequestReceived,
-  notifyReplacementApproved,
-  notifyReplacementRejected,
-  notifyReplacementShipped,
-  notifySellerReplacementRequest,
-  notifyRefundRequestReceived,
-  notifyRefundApproved,
-  notifyRefundCompleted,
-  notifySellerRefundRequest
+  markAsRead,
+  markAsUnread,
+  markAllAsRead,
+  archiveNotification,
+  deleteNotification,
+  getPreferences,
+  updatePreferences,
+  createDefaultPreferences,
+  deleteExpiredNotifications,
+  // Helper functions
+  notifyOrderPlaced,
+  notifyProductApproved,
+  notifyLowStock
 };
-

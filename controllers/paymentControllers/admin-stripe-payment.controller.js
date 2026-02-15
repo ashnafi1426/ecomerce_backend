@@ -555,10 +555,144 @@ const getSellers = async (req, res) => {
   }
 };
 
+/**
+ * Get All Seller Earnings Overview (Admin)
+ * GET /api/stripe/admin/seller-earnings
+ * 
+ * Returns comprehensive earnings breakdown for all sellers:
+ * - Pending balance (needs processing)
+ * - Available balance (ready for payout)
+ * - Paid balance (already paid)
+ * - Count of pending earnings
+ * - Oldest pending earning date
+ */
+const getAllSellerEarnings = async (req, res) => {
+  try {
+    console.log('📊 Admin fetching all seller earnings overview...');
+
+    // Get all sellers
+    const { data: sellers, error: sellersError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('role', 'seller')
+      .eq('status', 'active')
+      .order('display_name');
+
+    if (sellersError) {
+      console.error('❌ Error fetching sellers:', sellersError);
+      throw sellersError;
+    }
+
+    // Get all earnings for all sellers
+    const { data: allEarnings, error: earningsError } = await supabase
+      .from('seller_earnings')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (earningsError) {
+      console.error('❌ Error fetching earnings:', earningsError);
+      throw earningsError;
+    }
+
+    // Group earnings by seller and calculate balances
+    const sellerEarningsMap = new Map();
+
+    allEarnings.forEach(earning => {
+      if (!sellerEarningsMap.has(earning.seller_id)) {
+        sellerEarningsMap.set(earning.seller_id, {
+          pending_balance: 0,
+          available_balance: 0,
+          paid_balance: 0,
+          pending_count: 0,
+          oldest_pending_date: null,
+          pending_earnings: []
+        });
+      }
+
+      const sellerData = sellerEarningsMap.get(earning.seller_id);
+      const amount = earning.net_amount || 0;
+
+      if (earning.status === 'pending') {
+        sellerData.pending_balance += amount;
+        sellerData.pending_count++;
+        sellerData.pending_earnings.push(earning);
+        
+        // Track oldest pending date
+        if (!sellerData.oldest_pending_date || earning.created_at < sellerData.oldest_pending_date) {
+          sellerData.oldest_pending_date = earning.created_at;
+        }
+      } else if (earning.status === 'available') {
+        sellerData.available_balance += amount;
+      } else if (earning.status === 'paid') {
+        sellerData.paid_balance += amount;
+      }
+    });
+
+    // Build response with seller details and earnings
+    const sellersWithEarnings = sellers.map(seller => {
+      const earningsData = sellerEarningsMap.get(seller.id) || {
+        pending_balance: 0,
+        available_balance: 0,
+        paid_balance: 0,
+        pending_count: 0,
+        oldest_pending_date: null
+      };
+
+      return {
+        seller_id: seller.id,
+        seller_name: seller.display_name || seller.email,
+        seller_email: seller.email,
+        pending_balance: earningsData.pending_balance / 100, // Convert to dollars
+        available_balance: earningsData.available_balance / 100,
+        paid_balance: earningsData.paid_balance / 100,
+        pending_count: earningsData.pending_count,
+        oldest_pending_date: earningsData.oldest_pending_date 
+          ? new Date(earningsData.oldest_pending_date).toISOString().split('T')[0]
+          : null
+      };
+    });
+
+    // Filter to only show sellers with earnings
+    const sellersWithData = sellersWithEarnings.filter(seller => 
+      seller.pending_balance > 0 || 
+      seller.available_balance > 0 || 
+      seller.paid_balance > 0
+    );
+
+    // Calculate totals
+    const totals = {
+      total_pending: sellersWithData.reduce((sum, s) => sum + s.pending_balance, 0),
+      total_available: sellersWithData.reduce((sum, s) => sum + s.available_balance, 0),
+      total_paid: sellersWithData.reduce((sum, s) => sum + s.paid_balance, 0),
+      sellers_with_pending: sellersWithData.filter(s => s.pending_count > 0).length
+    };
+
+    console.log(`✅ Found ${sellersWithData.length} sellers with earnings`);
+    console.log(`   - ${totals.sellers_with_pending} sellers have pending earnings`);
+    console.log(`   - Total pending: $${totals.total_pending.toFixed(2)}`);
+    console.log(`   - Total available: $${totals.total_available.toFixed(2)}`);
+    console.log(`   - Total paid: $${totals.total_paid.toFixed(2)}`);
+
+    res.json({
+      success: true,
+      totals: totals,
+      sellers: sellersWithData
+    });
+  } catch (error) {
+    console.error('❌ Error fetching seller earnings overview:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch seller earnings',
+      details: error.message 
+    });
+  }
+};
+
 module.exports = {
   getAllPayments,
   getPaymentStatistics,
   processRefund,
   processPayout,
-  getSellers
+  getSellers,
+  getAllSellerEarnings
 };

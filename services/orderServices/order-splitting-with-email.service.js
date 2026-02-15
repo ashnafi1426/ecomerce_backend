@@ -1,5 +1,6 @@
-import supabase from '../../config/supabase.js';
-import { sendSellerOrderNotification } from '../emailServices/email.service.js';
+const supabase = require('../../config/supabase.js');
+const { sendSellerOrderNotification } = require('../emailServices/email.service.js');
+const notificationService = require('../notificationServices/notification.service.js');
 
 /**
  * Phase 3: Multi-Vendor Order Splitting Service with Email Notifications
@@ -158,35 +159,35 @@ async function notifySellers(subOrders, orderId) {
         .single();
       
       if (sellerError || !seller) {
-        console.error(`[Seller Notification] Seller not found: ${subOrder.seller_id}`);
+        console.error(`[Seller Notification] ❌ Seller not found: ${subOrder.seller_id}`);
         continue;
       }
       
-      // Create in-app notification
+      console.log(`[Seller Notification] Processing notification for seller: ${seller.email}`);
+      
+      // Create in-app notification using notification service (FIXED)
       try {
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: subOrder.seller_id,
-            type: 'new_order',
-            title: 'New Order Received',
-            message: `You have a new order with ${subOrder.item_count} item(s). Total: $${subOrder.subtotal.toFixed(2)}`,
-            metadata: {
-              order_id: orderId,
-              sub_order_id: subOrder.sub_order_id,
-              item_count: subOrder.item_count,
-              subtotal: subOrder.subtotal
-            },
-            priority: 'high'
-          });
+        await notificationService.createNotification({
+          user_id: subOrder.seller_id,
+          type: 'order_placed', // Changed from 'new_order' to match enum
+          title: 'New Order Received',
+          message: `You have a new order with ${subOrder.item_count} item(s). Total: $${subOrder.subtotal.toFixed(2)}`,
+          priority: 'high',
+          metadata: {
+            order_id: orderId,
+            sub_order_id: subOrder.sub_order_id,
+            item_count: subOrder.item_count,
+            subtotal: subOrder.subtotal
+          },
+          action_url: `/seller/orders/${subOrder.sub_order_id}`,
+          action_text: 'View Order',
+          channels: ['in_app', 'email']
+        });
         
-        if (notificationError) {
-          console.error(`[Seller Notification] In-app notification error:`, notificationError);
-        } else {
-          console.log(`[Seller Notification] In-app notification created for ${seller.email}`);
-        }
+        console.log(`[Seller Notification] ✅ In-app notification created for ${seller.email}`);
       } catch (err) {
-        console.error(`[Seller Notification] In-app notification failed:`, err.message);
+        console.error(`[Seller Notification] ❌ In-app notification failed for ${seller.email}:`, err.message);
+        console.error(`[Seller Notification] Error stack:`, err.stack);
       }
       
       // Send email notification
@@ -209,10 +210,11 @@ async function notifySellers(subOrders, orderId) {
       }
     }
     
-    console.log('[Seller Notification] All sellers notified');
+    console.log('[Seller Notification] ✅ All sellers notified');
     
   } catch (error) {
-    console.error('[Seller Notification] Error:', error);
+    console.error('[Seller Notification] ❌ Fatal error:', error);
+    console.error('[Seller Notification] Error stack:', error.stack);
     // Don't throw - notifications are not critical
   }
 }
@@ -344,7 +346,7 @@ async function checkAndUpdateParentOrderStatus(orderId) {
   }
 }
 
-export {
+module.exports = {
   splitOrderBySeller,
   notifySellers,
   getSubOrders,

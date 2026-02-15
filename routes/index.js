@@ -63,6 +63,9 @@ const stripePaymentRouter = require('./paymentRoutes/stripe-payment.routes');
 // Wishlist System
 const wishlistRouter = require('./wishlistRoutes/wishlist.routes');
 
+// Live Chat System
+const chatRouter = require('./chatRoutes/chat.routes');
+
 // Add routes to the main router
 router.use('/api/auth', authRouter); // Mount auth routes with prefix
 router.use(userRouter);
@@ -84,7 +87,7 @@ router.use(subOrderRouter);
 // Phase 5: Multi-vendor feature routes
 router.use(sellerRouter);
 router.use(managerRouter);
-router.use(notificationRouter);
+router.use('/api/notifications', notificationRouter);
 router.use(disputeRouter);
 
 // Phase 6: Product Variants System
@@ -120,6 +123,9 @@ router.use('/api/stripe', stripePaymentRouter);
 
 // Wishlist System
 router.use('/api/wishlist', wishlistRouter);
+
+// Live Chat System
+router.use('/api/chat', chatRouter);
 
 // Export the router
 module.exports = router;

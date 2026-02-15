@@ -117,7 +117,7 @@ const updateStatus = async (id, status) => {
 /**
  * Get all users (admin only) with enhanced search and pagination
  * @param {Object} filters - Filter options
- * @returns {Promise<Array>} Array of user objects
+ * @returns {Promise<Array>} Array of user objects with order stats
  */
 const findAll = async (filters = {}) => {
   let query = supabase
@@ -146,11 +146,41 @@ const findAll = async (filters = {}) => {
     query = query.range(offset, offset + filters.limit - 1);
   }
 
-  const { data, error } = await query;
+  const { data: users, error } = await query;
   
   if (error) throw error;
   
-  return data || [];
+  // Enhance users with order count and total spent
+  if (users && users.length > 0) {
+    const enhancedUsers = await Promise.all(users.map(async (user) => {
+      // Get order statistics for this user
+      const { data: orders, error: orderError } = await supabase
+        .from('orders')
+        .select('amount, status')
+        .eq('user_id', user.id);
+      
+      let orderCount = 0;
+      let totalSpent = 0;
+      
+      if (!orderError && orders) {
+        orderCount = orders.length;
+        // Calculate total spent (exclude cancelled orders)
+        totalSpent = orders
+          .filter(o => o.status !== 'cancelled')
+          .reduce((sum, o) => sum + (o.amount || 0), 0);
+      }
+      
+      return {
+        ...user,
+        order_count: orderCount,
+        total_spent: totalSpent // Amount in cents
+      };
+    }));
+    
+    return enhancedUsers;
+  }
+  
+  return users || [];
 };
 
 /**

@@ -1,8 +1,8 @@
-import nodemailer from 'nodemailer';
+const nodemailer = require('nodemailer');
 
 /**
- * Email Service for Seller Notifications
- * Sends email notifications to sellers when their products are purchased
+ * Email Service for Order Notifications
+ * Sends email notifications to customers and sellers
  */
 
 // Create transporter with Gmail
@@ -13,6 +13,240 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASSWORD || 'lhln ysjx bmot ssnw'
   }
 });
+
+/**
+ * Send customer order status notification email
+ * @param {Object} emailData - Email data
+ */
+async function sendCustomerOrderStatusEmail(emailData) {
+  try {
+    const {
+      email,
+      display_name,
+      title,
+      message,
+      action_url,
+      action_text,
+      metadata,
+      type
+    } = emailData;
+
+    const customerName = display_name || 'Customer';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const fullActionUrl = action_url ? `${frontendUrl}${action_url}` : null;
+
+    // Determine email styling based on status
+    let headerColor = '#FF9900'; // Default orange
+    let emoji = '📦';
+    
+    if (type === 'order_status_update') {
+      const status = metadata?.new_status;
+      if (status === 'confirmed') {
+        headerColor = '#17a2b8'; // Info blue
+        emoji = '⏳';
+      } else if (status === 'shipped') {
+        headerColor = '#007bff'; // Primary blue
+        emoji = '🚚';
+      } else if (status === 'delivered') {
+        headerColor = '#28a745'; // Success green
+        emoji = '✅';
+      } else if (status === 'cancelled') {
+        headerColor = '#dc3545'; // Danger red
+        emoji = '❌';
+      }
+    }
+
+    // Create email HTML
+    const emailHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    .email-container {
+      background-color: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background-color: ${headerColor};
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .content {
+      padding: 30px 20px;
+    }
+    .message-box {
+      background-color: #f9f9f9;
+      padding: 20px;
+      border-left: 4px solid ${headerColor};
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .order-details {
+      background-color: #f9f9f9;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 5px;
+      border: 1px solid #eee;
+    }
+    .order-details p {
+      margin: 8px 0;
+    }
+    .button {
+      display: inline-block;
+      background-color: ${headerColor};
+      color: white !important;
+      padding: 14px 32px;
+      text-decoration: none;
+      border-radius: 5px;
+      margin-top: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .button:hover {
+      opacity: 0.9;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+      color: #666;
+      font-size: 12px;
+    }
+    .tracking-info {
+      background-color: #e3f2fd;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 15px 0;
+    }
+    .tracking-info strong {
+      color: #1976d2;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>${emoji} ${title}</h1>
+    </div>
+    
+    <div class="content">
+      <p>Hello <strong>${customerName}</strong>,</p>
+      
+      <div class="message-box">
+        <p style="margin: 0; font-size: 16px;">${message}</p>
+      </div>
+      
+      ${metadata?.order_id ? `
+      <div class="order-details">
+        <h3 style="margin-top: 0;">Order Information</h3>
+        <p><strong>Order ID:</strong> ${metadata.order_id}</p>
+        ${metadata.product_name ? `<p><strong>Product:</strong> ${metadata.product_name}</p>` : ''}
+        ${metadata.new_status ? `<p><strong>Status:</strong> ${metadata.new_status.charAt(0).toUpperCase() + metadata.new_status.slice(1)}</p>` : ''}
+      </div>
+      ` : ''}
+      
+      ${metadata?.tracking_number && metadata?.carrier ? `
+      <div class="tracking-info">
+        <h3 style="margin-top: 0;">📍 Tracking Information</h3>
+        <p><strong>Carrier:</strong> ${metadata.carrier}</p>
+        <p><strong>Tracking Number:</strong> ${metadata.tracking_number}</p>
+        <p style="margin-bottom: 0;">You can track your package using the tracking number above.</p>
+      </div>
+      ` : ''}
+      
+      ${fullActionUrl && action_text ? `
+      <center>
+        <a href="${fullActionUrl}" class="button">
+          ${action_text}
+        </a>
+      </center>
+      ` : ''}
+      
+      <p style="margin-top: 30px;">Thank you for shopping with FastShop!</p>
+    </div>
+    
+    <div class="footer">
+      <p><strong>FastShop</strong> - Your Multi-Vendor Marketplace</p>
+      <p>This is an automated notification. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} FastShop. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    // Plain text version
+    const emailText = `
+${emoji} ${title}
+
+Hello ${customerName},
+
+${message}
+
+${metadata?.order_id ? `
+Order Information:
+- Order ID: ${metadata.order_id}
+${metadata.product_name ? `- Product: ${metadata.product_name}` : ''}
+${metadata.new_status ? `- Status: ${metadata.new_status.charAt(0).toUpperCase() + metadata.new_status.slice(1)}` : ''}
+` : ''}
+
+${metadata?.tracking_number && metadata?.carrier ? `
+Tracking Information:
+- Carrier: ${metadata.carrier}
+- Tracking Number: ${metadata.tracking_number}
+` : ''}
+
+${fullActionUrl && action_text ? `${action_text}: ${fullActionUrl}` : ''}
+
+Thank you for shopping with FastShop!
+
+---
+This is an automated notification from FastShop
+Please do not reply to this email
+© ${new Date().getFullYear()} FastShop. All rights reserved.
+    `;
+
+    // Send email
+    const mailOptions = {
+      from: `"FastShop" <${process.env.EMAIL_FROM || 'ashenafiashew074@gmail.com'}>`,
+      to: email,
+      subject: `${emoji} ${title}`,
+      text: emailText,
+      html: emailHTML
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log(`[Email] ✅ Sent order status email to ${email} - Message ID: ${info.messageId}`);
+    
+    return {
+      success: true,
+      messageId: info.messageId,
+      email: email
+    };
+
+  } catch (error) {
+    console.error('[Email] ❌ Error sending customer order status email:', error);
+    throw error;
+  }
+}
 
 /**
  * Send new order notification email to seller
@@ -272,8 +506,9 @@ async function testEmailConfiguration() {
   }
 }
 
-export {
+module.exports = {
   sendSellerOrderNotification,
   sendOrderShippedConfirmation,
+  sendCustomerOrderStatusEmail,
   testEmailConfiguration
 };
