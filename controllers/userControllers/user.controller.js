@@ -109,6 +109,41 @@ const deleteMyAccount = async (req, res, next) => {
 };
 
 // ============================================
+// SHARED OPERATIONS (Authenticated Users)
+// ============================================
+
+/**
+ * Get user profile for chat (limited info)
+ * GET /api/users/:id
+ * Available to all authenticated users for chat functionality
+ */
+const getUserProfileForChat = async (req, res, next) => {
+  try {
+    const user = await userService.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found'
+      });
+    }
+
+    // Return only public profile information for chat
+    res.json({
+      id: user.id,
+      email: user.email,
+      display_name: user.display_name,
+      role: user.role,
+      phone: user.phone,
+      is_online: user.is_online || false,
+      last_seen_at: user.last_seen_at
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
 // ADMIN OPERATIONS (All Users)
 // ============================================
 
@@ -676,6 +711,9 @@ module.exports = {
   updateMyProfile,
   getMyStatistics,
   deleteMyAccount,
+
+  // Shared operations (authenticated users)
+  getUserProfileForChat,
 
   // Admin operations
   getAllUsers,

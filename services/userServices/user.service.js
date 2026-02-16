@@ -502,6 +502,64 @@ const findSellerById = async (sellerId) => {
   return data;
 };
 
+/**
+ * Search users for chat
+ * @param {String} query - Search query
+ * @param {String} role - Filter by role (optional)
+ * @param {Number} limit - Result limit
+ * @returns {Promise<Array>} Array of users
+ */
+const searchUsersForChat = async (query, role = null, limit = 20) => {
+  try {
+    let queryBuilder = supabase
+      .from('users')
+      .select(`
+        id,
+        email,
+        full_name,
+        role,
+        status,
+        created_at,
+        stores (
+          id,
+          store_name
+        )
+      `)
+      .eq('status', 'active')
+      .limit(limit);
+
+    // Filter by role if specified
+    if (role && role !== 'all') {
+      queryBuilder = queryBuilder.eq('role', role);
+    }
+
+    // Search in multiple fields
+    if (query && query.trim()) {
+      queryBuilder = queryBuilder.or(`
+        email.ilike.%${query}%,
+        full_name.ilike.%${query}%
+      `);
+    }
+
+    const { data, error } = await queryBuilder;
+
+    if (error) throw error;
+
+    // Format results
+    return data.map(user => ({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      store_name: user.stores?.[0]?.store_name || null,
+      is_online: false // TODO: Get from online status tracking
+    }));
+  } catch (error) {
+    console.error('[UserService] Error searching users for chat:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   findById,
   findByEmail,
@@ -516,6 +574,7 @@ module.exports = {
   deleteUser,
   getStatistics,
   search,
+  searchUsersForChat,
   // Phase 2: Seller & Manager functions
   createSeller,
   createManager,

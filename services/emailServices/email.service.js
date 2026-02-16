@@ -506,9 +506,197 @@ async function testEmailConfiguration() {
   }
 }
 
+/**
+ * Send chat message notification email
+ * @param {Object} emailData - Email data
+ */
+async function sendChatMessageEmail(emailData) {
+  try {
+    const {
+      email,
+      display_name,
+      title,
+      message,
+      action_url,
+      action_text,
+      metadata
+    } = emailData;
+
+    const recipientName = display_name || 'User';
+    const senderName = metadata?.sender_name || 'Someone';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const fullActionUrl = action_url ? `${frontendUrl}${action_url}` : null;
+
+    // Create email HTML
+    const emailHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    .email-container {
+      background-color: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background-color: #0084ff;
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .content {
+      padding: 30px 20px;
+    }
+    .message-box {
+      background-color: #f0f2f5;
+      padding: 20px;
+      border-left: 4px solid #0084ff;
+      margin: 20px 0;
+      border-radius: 8px;
+    }
+    .sender-info {
+      color: #0084ff;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .message-text {
+      color: #1c1e21;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .button {
+      display: inline-block;
+      background-color: #0084ff;
+      color: white !important;
+      padding: 14px 32px;
+      text-decoration: none;
+      border-radius: 5px;
+      margin-top: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .button:hover {
+      background-color: #0073e6;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+      color: #666;
+      font-size: 12px;
+    }
+    .chat-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <div class="chat-icon">💬</div>
+      <h1>${title}</h1>
+    </div>
+    
+    <div class="content">
+      <p>Hello <strong>${recipientName}</strong>,</p>
+      
+      <p>You have a new message from <strong>${senderName}</strong>:</p>
+      
+      <div class="message-box">
+        <div class="sender-info">${senderName}</div>
+        <div class="message-text">${message}</div>
+      </div>
+      
+      ${fullActionUrl && action_text ? `
+      <center>
+        <a href="${fullActionUrl}" class="button">
+          ${action_text}
+        </a>
+      </center>
+      ` : ''}
+      
+      <p style="margin-top: 30px; color: #666; font-size: 14px;">
+        💡 Tip: Reply directly from the FastShop platform to continue the conversation.
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p><strong>FastShop</strong> - Your Multi-Vendor Marketplace</p>
+      <p>This is an automated notification. Please do not reply to this email.</p>
+      <p>To manage your notification preferences, visit your account settings.</p>
+      <p>&copy; ${new Date().getFullYear()} FastShop. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    // Plain text version
+    const emailText = `
+💬 ${title}
+
+Hello ${recipientName},
+
+You have a new message from ${senderName}:
+
+"${message}"
+
+${fullActionUrl && action_text ? `${action_text}: ${fullActionUrl}` : ''}
+
+💡 Tip: Reply directly from the FastShop platform to continue the conversation.
+
+---
+This is an automated notification from FastShop
+Please do not reply to this email
+To manage your notification preferences, visit your account settings
+© ${new Date().getFullYear()} FastShop. All rights reserved.
+    `;
+
+    // Send email
+    const mailOptions = {
+      from: `"FastShop Messages" <${process.env.EMAIL_FROM || 'ashenafiashew074@gmail.com'}>`,
+      to: email,
+      subject: `💬 ${title} from ${senderName}`,
+      text: emailText,
+      html: emailHTML
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log(`[Email] ✅ Sent chat message email to ${email} - Message ID: ${info.messageId}`);
+    
+    return {
+      success: true,
+      messageId: info.messageId,
+      email: email
+    };
+
+  } catch (error) {
+    console.error('[Email] ❌ Error sending chat message email:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   sendSellerOrderNotification,
   sendOrderShippedConfirmation,
   sendCustomerOrderStatusEmail,
+  sendChatMessageEmail,
   testEmailConfiguration
 };

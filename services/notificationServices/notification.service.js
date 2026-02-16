@@ -64,16 +64,29 @@ async function createNotification(notificationData) {
           .single();
 
         if (!userError && userData && userData.email) {
-          await emailService.sendCustomerOrderStatusEmail({
-            email: userData.email,
-            display_name: userData.display_name,
-            title,
-            message,
-            action_url,
-            action_text,
-            metadata,
-            type
-          });
+          // Use appropriate email template based on notification type
+          if (type === 'new_message') {
+            await emailService.sendChatMessageEmail({
+              email: userData.email,
+              display_name: userData.display_name,
+              title,
+              message,
+              action_url,
+              action_text,
+              metadata
+            });
+          } else {
+            await emailService.sendCustomerOrderStatusEmail({
+              email: userData.email,
+              display_name: userData.display_name,
+              title,
+              message,
+              action_url,
+              action_text,
+              metadata,
+              type
+            });
+          }
           console.log(`[Notification] ✅ Sent email notification to ${userData.email}`);
         }
       } catch (emailError) {

@@ -11,6 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../../controllers/userControllers/user.controller');
+const userSearchController = require('../../controllers/userControllers/user-search.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin, requireAnyRole } = require('../../middlewares/role.middleware');
 
@@ -31,11 +32,21 @@ router.get('/api/users/me/statistics', authenticate, userController.getMyStatist
 router.delete('/api/users/me', authenticate, userController.deleteMyAccount);
 
 // ============================================
+// SHARED ROUTES (Authenticated Users)
+// ============================================
+
+// Search users for chat (all authenticated users can search)
+router.get('/api/users/search', authenticate, userSearchController.searchUsersForChat);
+
+// Get user profile by ID (for chat - limited info)
+router.get('/api/users/:id', authenticate, userController.getUserProfileForChat);
+
+// ============================================
 // ADMIN ROUTES (All Users)
 // ============================================
 
-// Search users (must be before /:id to avoid conflict)
-router.get('/api/users/search', authenticate, requireAdmin, userController.searchUsers);
+// Admin search users (more detailed)
+router.get('/api/admin/users/search', authenticate, requireAdmin, userController.searchUsers);
 
 // Get all users
 router.get('/api/users', authenticate, requireAdmin, userController.getAllUsers);
@@ -43,8 +54,8 @@ router.get('/api/users', authenticate, requireAdmin, userController.getAllUsers)
 // Create user - DISABLED: Using admin routes instead
 // router.post('/api/users', authenticate, requireAdmin, userController.createUser);
 
-// Get user by ID
-router.get('/api/users/:id', authenticate, requireAdmin, userController.getUserById);
+// Get user by ID (admin full access)
+router.get('/api/admin/users/:id', authenticate, requireAdmin, userController.getUserById);
 
 // Update user
 router.put('/api/users/:id', authenticate, requireAdmin, userController.updateUser);

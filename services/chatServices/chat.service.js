@@ -16,7 +16,7 @@ class ChatService {
         .from('conversations')
         .insert({
           type,
-          participants: participantIds,
+          participant_ids: participantIds, // Fixed: use participant_ids to match schema
           metadata,
           last_message_at: new Date().toISOString()
         })
@@ -36,16 +36,23 @@ class ChatService {
    */
   async findConversation(participantIds) {
     try {
-      const { data, error } = await supabase
+      // Get all conversations and filter client-side
+      // This is more reliable than JSONB operators which can be tricky
+      const { data: conversations, error } = await supabase
         .from('conversations')
         .select('*')
-        .contains('participants', participantIds)
-        .order('last_message_at', { ascending: false })
-        .limit(1)
-        .single();
+        .order('last_message_at', { ascending: false });
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-      return data;
+      if (error) throw error;
+
+      // Find conversation with exact participant match
+      const conversation = (conversations || []).find(conv => {
+        const convParticipants = conv.participant_ids || [];
+        return convParticipants.length === participantIds.length &&
+               participantIds.every(id => convParticipants.includes(id));
+      });
+
+      return conversation || null;
     } catch (error) {
       console.error('[ChatService] Error finding conversation:', error);
       return null;
@@ -77,15 +84,22 @@ class ChatService {
    */
   async getUserConversations(userId, limit = 50) {
     try {
-      const { data, error } = await supabase
+      // Get all conversations and filter client-side
+      const { data: conversations, error } = await supabase
         .from('conversations')
         .select('*')
-        .contains('participants', [userId])
         .order('last_message_at', { ascending: false })
-        .limit(limit);
+        .limit(limit * 2); // Get more to account for filtering
 
       if (error) throw error;
-      return data || [];
+
+      // Filter conversations where user is a participant
+      const userConversations = (conversations || []).filter(conv => {
+        const participants = conv.participant_ids || [];
+        return participants.includes(userId);
+      }).slice(0, limit); // Limit after filtering
+
+      return userConversations;
     } catch (error) {
       console.error('[ChatService] Error getting user conversations:', error);
       throw error;
@@ -133,7 +147,7 @@ class ChatService {
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: true }) // Changed to ascending for correct order
         .range(offset, offset + limit - 1);
 
       if (error) throw error;
@@ -149,17 +163,22 @@ class ChatService {
    */
   async markMessagesAsRead(conversationId, userId) {
     try {
-      // Get unread messages
+      // Get all messages in conversation
       const { data: messages, error: fetchError } = await supabase
         .from('messages')
         .select('id, read_by')
-        .eq('conversation_id', conversationId)
-        .not('read_by', 'cs', `{${userId}}`); // Not contains userId
+        .eq('conversation_id', conversationId);
 
       if (fetchError) throw fetchError;
 
-      // Update each message
-      for (const message of messages || []) {
+      // Filter messages not read by this user (client-side filtering)
+      const unreadMessages = (messages || []).filter(msg => {
+        const readBy = msg.read_by || [];
+        return !readBy.includes(userId);
+      });
+
+      // Update each unread message
+      for (const message of unreadMessages) {
         const updatedReadBy = [...(message.read_by || []), userId];
         
         await supabase
@@ -168,7 +187,7 @@ class ChatService {
           .eq('id', message.id);
       }
 
-      return { success: true, count: messages?.length || 0 };
+      return { success: true, count: unreadMessages.length };
     } catch (error) {
       console.error('[ChatService] Error marking messages as read:', error);
       throw error;
@@ -282,6 +301,284 @@ class ChatService {
     } catch (error) {
       console.error('[ChatService] Error getting online status:', error);
       return { is_online: false };
+    }
+  }
+
+  // =====================================================
+  // TELEGRAM FEATURES - PHASE 2.1
+  // =====================================================
+
+  /**
+   * Edit a message
+   */
+  async editMessage(messageId, userId, newText) {
+    try {
+      const { data, error } = await supabase
+        .rpc('edit_message', {
+          p_message_id: messageId,
+          p_user_id: userId,
+          p_new_text: newText
+        });
+
+      if (error) throw error;
+      
+      // Get updated message
+      const { data: message, error: fetchError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('id', messageId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      return message;
+    } catch (error) {
+      console.error('[ChatService] Error editing message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a message
+   */
+  async deleteMessage(messageId, userId, deletionType = 'for_me') {
+    try {
+      const { data, error } = await supabase
+        .rpc('delete_message', {
+          p_message_id: messageId,
+          p_user_id: userId,
+          p_deletion_type: deletionType
+        });
+
+      if (error) throw error;
+      return { success: true, deletionType };
+    } catch (error) {
+      console.error('[ChatService] Error deleting message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add reaction to message
+   */
+  async addReaction(messageId, userId, reaction) {
+    try {
+      const { data, error } = await supabase
+        .rpc('add_message_reaction', {
+          p_message_id: messageId,
+          p_user_id: userId,
+          p_reaction: reaction
+        });
+
+      if (error) throw error;
+      
+      // Get updated reactions for this message
+      const reactions = await this.getMessageReactions(messageId);
+      return reactions;
+    } catch (error) {
+      console.error('[ChatService] Error adding reaction:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove reaction from message
+   */
+  async removeReaction(messageId, userId, reaction) {
+    try {
+      const { data, error } = await supabase
+        .rpc('remove_message_reaction', {
+          p_message_id: messageId,
+          p_user_id: userId,
+          p_reaction: reaction
+        });
+
+      if (error) throw error;
+      
+      // Get updated reactions for this message
+      const reactions = await this.getMessageReactions(messageId);
+      return reactions;
+    } catch (error) {
+      console.error('[ChatService] Error removing reaction:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get reactions for a message
+   */
+  async getMessageReactions(messageId) {
+    try {
+      const { data, error } = await supabase
+        .from('message_reactions')
+        .select('*')
+        .eq('message_id', messageId);
+
+      if (error) throw error;
+
+      // Group reactions by emoji
+      const grouped = {};
+      (data || []).forEach(reaction => {
+        if (!grouped[reaction.reaction]) {
+          grouped[reaction.reaction] = {
+            reaction: reaction.reaction,
+            count: 0,
+            user_ids: []
+          };
+        }
+        grouped[reaction.reaction].count++;
+        grouped[reaction.reaction].user_ids.push(reaction.user_id);
+      });
+
+      return Object.values(grouped);
+    } catch (error) {
+      console.error('[ChatService] Error getting reactions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get message edit history
+   */
+  async getMessageEditHistory(messageId) {
+    try {
+      const { data, error } = await supabase
+        .from('message_edits')
+        .select('*')
+        .eq('message_id', messageId)
+        .order('edited_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('[ChatService] Error getting edit history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Send reply to a message (threading)
+   */
+  async sendReply(conversationId, userId, messageText, replyToMessageId, attachments = null) {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: userId,
+          message_text: messageText,
+          reply_to_message_id: replyToMessageId,
+          attachments,
+          read_by: [userId]
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update conversation's last_message_at
+      await supabase
+        .from('conversations')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', conversationId);
+
+      return data;
+    } catch (error) {
+      console.error('[ChatService] Error sending reply:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get message with full details (reactions, reply info, etc.)
+   */
+  async getMessageDetails(messageId) {
+    try {
+      // Get message
+      const { data: message, error: msgError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('id', messageId)
+        .single();
+
+      if (msgError) throw msgError;
+
+      // Get reactions
+      const reactions = await this.getMessageReactions(messageId);
+
+      // Get reply-to message if exists
+      let replyToMessage = null;
+      if (message.reply_to_message_id) {
+        const { data: replyMsg, error: replyError } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('id', message.reply_to_message_id)
+          .single();
+
+        if (!replyError) {
+          replyToMessage = replyMsg;
+        }
+      }
+
+      // Get edit history if edited
+      let editHistory = [];
+      if (message.is_edited) {
+        editHistory = await this.getMessageEditHistory(messageId);
+      }
+
+      return {
+        ...message,
+        reactions,
+        reply_to: replyToMessage,
+        edit_history: editHistory
+      };
+    } catch (error) {
+      console.error('[ChatService] Error getting message details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get messages with enhanced data (reactions, replies, etc.)
+   */
+  async getMessagesEnhanced(conversationId, limit = 50, offset = 0) {
+    try {
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true }) // Changed to ascending for correct order
+        .range(offset, offset + limit - 1);
+
+      if (error) throw error;
+
+      // Enhance each message with reactions and reply info
+      const enhancedMessages = await Promise.all(
+        (messages || []).map(async (msg) => {
+          const reactions = await this.getMessageReactions(msg.id);
+          
+          let replyToMessage = null;
+          if (msg.reply_to_message_id) {
+            const { data: replyMsg } = await supabase
+              .from('messages')
+              .select('id, message_text, sender_id, created_at')
+              .eq('id', msg.reply_to_message_id)
+              .single();
+            
+            replyToMessage = replyMsg;
+          }
+
+          return {
+            ...msg,
+            reactions,
+            reply_to: replyToMessage
+          };
+        })
+      );
+
+      return enhancedMessages;
+    } catch (error) {
+      console.error('[ChatService] Error getting enhanced messages:', error);
+      throw error;
     }
   }
 }
