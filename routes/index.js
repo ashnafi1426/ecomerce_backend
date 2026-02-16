@@ -72,7 +72,7 @@ router.use(userRouter);
 router.use(productRouter);
 router.use(orderRouter);
 router.use('/api/admin', adminRouter); // Mount admin routes with prefix
-router.use(categoryRouter);
+router.use('/api/categories', categoryRouter); // Mount category routes with prefix
 router.use(returnRouter);
 router.use(addressRouter);
 router.use(auditLogRouter);
