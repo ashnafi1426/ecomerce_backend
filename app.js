@@ -63,10 +63,7 @@ app.use('/api/', limiter);
 // ============================================
 // Configure CORS for production deployment
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:5173',
-  'https://ecomerce-client-l64h.vercel.app',
+  'https://ecomerce-woas.vercel.app/',
   process.env.FRONTEND_URL
 ].filter(Boolean); // Remove undefined values
 
