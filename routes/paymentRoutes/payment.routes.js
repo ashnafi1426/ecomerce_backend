@@ -18,7 +18,7 @@ let paymentController;
 
 // Create payment intent (can be guest or authenticated)
 // Use optionalAuthenticate to attach user if logged in, but allow guests
-router.post('/api/payments/create-intent', optionalAuthenticate, async (req, res) => {
+router.post('/create-intent', optionalAuthenticate, async (req, res) => {
   if (!paymentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
@@ -27,7 +27,7 @@ router.post('/api/payments/create-intent', optionalAuthenticate, async (req, res
 
 // Create order after payment success (no webhooks)
 // Use optionalAuthenticate to attach user if logged in, but allow guests
-router.post('/api/payments/create-order', optionalAuthenticate, async (req, res) => {
+router.post('/create-order', optionalAuthenticate, async (req, res) => {
   if (!paymentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
@@ -35,7 +35,7 @@ router.post('/api/payments/create-order', optionalAuthenticate, async (req, res)
 });
 
 // Get payment status
-router.get('/api/payments/:paymentIntentId', async (req, res) => {
+router.get('/:paymentIntentId', async (req, res) => {
   if (!paymentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
@@ -43,7 +43,7 @@ router.get('/api/payments/:paymentIntentId', async (req, res) => {
 });
 
 // Cancel payment (requires authentication)
-router.post('/api/payments/:paymentIntentId/cancel', authenticate, async (req, res) => {
+router.post('/:paymentIntentId/cancel', authenticate, async (req, res) => {
   if (!paymentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
@@ -55,7 +55,7 @@ router.post('/api/payments/:paymentIntentId/cancel', authenticate, async (req, r
 // ============================================
 
 // Get all payments (admin only)
-router.get('/api/admin/payments', authenticate, requireAdmin, async (req, res) => {
+router.get('/admin/payments', authenticate, requireAdmin, async (req, res) => {
   if (!paymentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
@@ -63,7 +63,7 @@ router.get('/api/admin/payments', authenticate, requireAdmin, async (req, res) =
 });
 
 // Get payment statistics (admin only)
-router.get('/api/admin/payments/statistics', authenticate, requireAdmin, async (req, res) => {
+router.get('/admin/payments/statistics', authenticate, requireAdmin, async (req, res) => {
   if (!paymentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
@@ -71,7 +71,7 @@ router.get('/api/admin/payments/statistics', authenticate, requireAdmin, async (
 });
 
 // Process refund (admin only)
-router.post('/api/admin/payments/:id/refund', authenticate, requireAdmin, async (req, res) => {
+router.post('/admin/payments/:id/refund', authenticate, requireAdmin, async (req, res) => {
   if (!paymentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }

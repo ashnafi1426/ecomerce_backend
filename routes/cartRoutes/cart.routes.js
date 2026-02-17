@@ -16,27 +16,27 @@ const { requireCustomer } = require('../../middlewares/role.middleware');
 // ============================================
 
 // Get user's cart
-router.get('/api/cart', authenticate, requireCustomer, cartController.getCart);
+router.get('/', authenticate, requireCustomer, cartController.getCart);
 
 // Get cart summary (total items, total price)
-router.get('/api/cart/summary', authenticate, requireCustomer, cartController.getCartSummary);
+router.get('/summary', authenticate, requireCustomer, cartController.getCartSummary);
 
 // Get cart item count
-router.get('/api/cart/count', authenticate, requireCustomer, cartController.getCartCount);
+router.get('/count', authenticate, requireCustomer, cartController.getCartCount);
 
 // Add item to cart
-router.post('/api/cart/items', authenticate, requireCustomer, cartController.addItem);
+router.post('/items', authenticate, requireCustomer, cartController.addItem);
 
 // Update cart item quantity
-router.put('/api/cart/items/:productId', authenticate, requireCustomer, cartController.updateQuantity);
+router.put('/items/:productId', authenticate, requireCustomer, cartController.updateQuantity);
 
 // Remove item from cart
-router.delete('/api/cart/items/:productId', authenticate, requireCustomer, cartController.removeItem);
+router.delete('/items/:productId', authenticate, requireCustomer, cartController.removeItem);
 
 // Clear entire cart
-router.delete('/api/cart', authenticate, requireCustomer, cartController.clearCart);
+router.delete('/', authenticate, requireCustomer, cartController.clearCart);
 
 // Validate cart before checkout
-router.post('/api/cart/validate', authenticate, requireCustomer, cartController.validateCart);
+router.post('/validate', authenticate, requireCustomer, cartController.validateCart);
 
 module.exports = router;

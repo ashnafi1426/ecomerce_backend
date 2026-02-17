@@ -87,6 +87,23 @@ if (process.env.NODE_ENV === 'development') {
 // API ROUTES
 // ============================================
 
+// Root route - For Render health checks
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'FastShop E-Commerce API',
+    data: {
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        health: '/api/v1/health',
+        api: '/api/v1'
+      }
+    }
+  });
+});
+
 // Health check endpoint - API v1
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({ 

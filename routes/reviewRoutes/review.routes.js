@@ -1,61 +1,22 @@
-/**
- * REVIEW ROUTES
- * 
- * Routes for product reviews and ratings.
- */
-
 const express = require('express');
 const router = express.Router();
 const reviewController = require('../../controllers/reviewControllers/review.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
-const { requireCustomer, requireAdmin } = require('../../middlewares/role.middleware');
 
-// ============================================
-// PUBLIC ROUTES (No authentication required)
-// ============================================
+/**
+ * Review Routes
+ * All routes for product reviews and ratings
+ */
 
-// Get reviews for a product
-router.get('/api/products/:productId/reviews', reviewController.getProductReviews);
+// Public routes (no authentication required)
+router.get('/product/:productId', reviewController.getProductReviews);
+router.get('/product/:productId/summary', reviewController.getReviewSummary);
 
-// Get product rating statistics
-router.get('/api/products/:productId/rating-stats', reviewController.getProductRatingStats);
-
-// ============================================
-// CUSTOMER ROUTES
-// ============================================
-
-// Create review
-router.post('/api/reviews', authenticate, requireCustomer, reviewController.createReview);
-
-// Get my reviews
-router.get('/api/reviews/my-reviews', authenticate, requireCustomer, reviewController.getMyReviews);
-
-// Get review by ID
-router.get('/api/reviews/:id', authenticate, reviewController.getReviewById);
-
-// Update review
-router.put('/api/reviews/:id', authenticate, requireCustomer, reviewController.updateReview);
-
-// Delete review
-router.delete('/api/reviews/:id', authenticate, requireCustomer, reviewController.deleteReview);
-
-// ============================================
-// ADMIN ROUTES
-// ============================================
-
-// Get all reviews
-router.get('/api/admin/reviews', authenticate, requireAdmin, reviewController.getAllReviews);
-
-// Get pending reviews
-router.get('/api/admin/reviews/pending', authenticate, requireAdmin, reviewController.getPendingReviews);
-
-// Get review statistics
-router.get('/api/admin/reviews/statistics', authenticate, requireAdmin, reviewController.getStatistics);
-
-// Approve review
-router.post('/api/admin/reviews/:id/approve', authenticate, requireAdmin, reviewController.approveReview);
-
-// Reject review
-router.post('/api/admin/reviews/:id/reject', authenticate, requireAdmin, reviewController.rejectReview);
+// Protected routes (authentication required)
+router.post('/product/:productId', authenticate, reviewController.createReview);
+router.put('/:reviewId', authenticate, reviewController.updateReview);
+router.delete('/:reviewId', authenticate, reviewController.deleteReview);
+router.post('/:reviewId/helpful', authenticate, reviewController.markReviewHelpful);
+router.get('/product/:productId/can-review', authenticate, reviewController.canReviewProduct);
 
 module.exports = router;

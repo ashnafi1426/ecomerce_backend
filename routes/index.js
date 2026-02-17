@@ -88,9 +88,9 @@ router.use('/api/categories', categoryRouter); // Mount category routes with pre
 router.use(returnRouter);
 router.use(addressRouter);
 router.use(auditLogRouter);
-router.use(cartRouter);
-router.use(paymentRouter);
-router.use(reviewRouter);
+router.use('/api/cart', cartRouter);
+router.use('/api/payments', paymentRouter);
+router.use('/api/reviews', reviewRouter);
 router.use(analyticsRouter);
 router.use('/api', commissionRouter);
 router.use(sellerBalanceRouter);

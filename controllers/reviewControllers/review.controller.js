@@ -1,295 +1,422 @@
-/**
- * REVIEW CONTROLLER
- * 
- * Handles HTTP requests for product reviews and ratings.
- */
-
-const reviewService = require('../../services/reviewServices/review.service');
+const supabase = require('../../config/supabase');
 
 /**
- * REQUIREMENT 1: Create review for purchased product
- * POST /api/reviews
+ * Review Controller
+ * Handles product reviews and ratings
  */
-const createReview = async (req, res, next) => {
+
+// Get all reviews for a product
+exports.getProductReviews = async (req, res) => {
   try {
-    const { productId, rating, title, comment } = req.body;
+    const { productId } = req.params;
+    const { page = 1, limit = 10, sortBy = 'recent' } = req.query;
+    const offset = (page - 1) * limit;
 
-    if (!productId || !rating) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Product ID and rating are required'
-      });
+    // Build query with user join
+    let query = supabase
+      .from('product_reviews')
+      .select(`
+        id,
+        rating,
+        title,
+        review_text,
+        verified_purchase,
+        helpful_count,
+        created_at,
+        user:users!user_id(id, display_name, email)
+      `)
+      .eq('product_id', productId)
+      .range(offset, offset + limit - 1);
+
+    // Apply sorting
+    if (sortBy === 'helpful') {
+      query = query.order('helpful_count', { ascending: false }).order('created_at', { ascending: false });
+    } else if (sortBy === 'rating_high') {
+      query = query.order('rating', { ascending: false }).order('created_at', { ascending: false });
+    } else if (sortBy === 'rating_low') {
+      query = query.order('rating', { ascending: true }).order('created_at', { ascending: false });
+    } else {
+      query = query.order('created_at', { ascending: false });
     }
 
-    const review = await reviewService.createReview(req.user.id, {
-      productId,
-      rating,
-      title,
-      comment
-    });
+    const { data: reviews, error, count } = await query;
 
-    res.status(201).json({
-      message: 'Review submitted successfully. It will be visible after admin approval.',
-      review
+    if (error) throw error;
+
+    // Get total count
+    const { count: totalCount, error: countError } = await supabase
+      .from('product_reviews')
+      .select('*', { count: 'exact', head: true })
+      .eq('product_id', productId);
+
+    if (countError) throw countError;
+
+    const total = totalCount || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Format reviews
+    const formattedReviews = reviews?.map(review => ({
+      id: review.id,
+      rating: review.rating,
+      title: review.title,
+      review_text: review.review_text,
+      verified_purchase: review.verified_purchase,
+      helpful_count: review.helpful_count,
+      created_at: review.created_at,
+      user_id: review.user?.id,
+      user_name: review.user?.display_name || 'Anonymous',
+      user_email: review.user?.email
+    })) || [];
+
+    res.json({
+      success: true,
+      reviews: formattedReviews,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages
+      }
     });
   } catch (error) {
-    if (error.message.includes('already reviewed')) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: error.message
-      });
-    }
-    if (error.message.includes('Rating must be')) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: error.message
-      });
-    }
-    next(error);
+    console.error('Error fetching product reviews:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch reviews',
+      error: error.message
+    });
   }
 };
 
-/**
- * Update review
- * PUT /api/reviews/:id
- */
-const updateReview = async (req, res, next) => {
+// Get review summary/statistics for a product
+exports.getReviewSummary = async (req, res) => {
   try {
-    const { rating, title, comment } = req.body;
+    const { productId } = req.params;
 
-    const review = await reviewService.updateReview(
-      req.params.id,
-      req.user.id,
-      { rating, title, comment }
-    );
+    const { data: product, error } = await supabase
+      .from('products')
+      .select('average_rating, total_reviews, rating_distribution')
+      .eq('id', productId)
+      .single();
+
+    if (error || !product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Calculate percentages
+    const distribution = product.rating_distribution || { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    const total = product.total_reviews || 0;
+    
+    const percentages = {};
+    for (let i = 1; i <= 5; i++) {
+      percentages[i] = total > 0 ? Math.round((distribution[i] / total) * 100) : 0;
+    }
 
     res.json({
+      success: true,
+      summary: {
+        averageRating: parseFloat(product.average_rating) || 0,
+        totalReviews: total,
+        distribution,
+        percentages
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching review summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch review summary',
+      error: error.message
+    });
+  }
+};
+
+// Create a new review
+exports.createReview = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { rating, title, reviewText } = req.body;
+    const userId = req.user.id;
+
+    // Validate input
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 5'
+      });
+    }
+
+    if (!title || title.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Review title is required'
+      });
+    }
+
+    if (!reviewText || reviewText.trim().length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Review text must be at least 10 characters'
+      });
+    }
+
+    // Check if user has purchased this product
+    const { data: orders, error: orderError } = await supabase
+      .from('orders')
+      .select('id, order_items!inner(product_id)')
+      .eq('user_id', userId)
+      .eq('order_items.product_id', productId)
+      .eq('status', 'delivered');
+
+    if (orderError) throw orderError;
+
+    const verifiedPurchase = orders && orders.length > 0;
+
+    // Insert review
+    const { data: review, error } = await supabase
+      .from('product_reviews')
+      .insert({
+        product_id: productId,
+        user_id: userId,
+        rating: rating,
+        title: title.trim(),
+        review_text: reviewText.trim(),
+        verified_purchase: verifiedPurchase
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') { // Unique constraint violation
+        return res.status(400).json({
+          success: false,
+          message: 'You have already reviewed this product'
+        });
+      }
+      throw error;
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Review created successfully',
+      review
+    });
+  } catch (error) {
+    console.error('Error creating review:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create review',
+      error: error.message
+    });
+  }
+};
+
+// Update a review
+exports.updateReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const { rating, title, reviewText } = req.body;
+    const userId = req.user.id;
+
+    // Validate input
+    if (rating && (rating < 1 || rating > 5)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 5'
+      });
+    }
+
+    // Check if review belongs to user
+    const { data: existingReview, error: checkError } = await supabase
+      .from('product_reviews')
+      .select('*')
+      .eq('id', reviewId)
+      .eq('user_id', userId)
+      .single();
+
+    if (checkError || !existingReview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found or you do not have permission to update it'
+      });
+    }
+
+    // Build update object
+    const updates = {
+      updated_at: new Date().toISOString()
+    };
+    if (rating) updates.rating = rating;
+    if (title) updates.title = title.trim();
+    if (reviewText) updates.review_text = reviewText.trim();
+
+    // Update review
+    const { data: review, error } = await supabase
+      .from('product_reviews')
+      .update(updates)
+      .eq('id', reviewId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
       message: 'Review updated successfully',
       review
     });
   } catch (error) {
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: error.message
-      });
-    }
-    if (error.message.includes('Unauthorized')) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: error.message
-      });
-    }
-    if (error.message.includes('Rating must be')) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: error.message
-      });
-    }
-    next(error);
+    console.error('Error updating review:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update review',
+      error: error.message
+    });
   }
 };
 
-/**
- * Delete review
- * DELETE /api/reviews/:id
- */
-const deleteReview = async (req, res, next) => {
+// Delete a review
+exports.deleteReview = async (req, res) => {
   try {
-    await reviewService.deleteReview(req.params.id, req.user.id);
+    const { reviewId } = req.params;
+    const userId = req.user.id;
+
+    // Check if review belongs to user
+    const { data: existingReview, error: checkError } = await supabase
+      .from('product_reviews')
+      .select('*')
+      .eq('id', reviewId)
+      .eq('user_id', userId)
+      .single();
+
+    if (checkError || !existingReview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found or you do not have permission to delete it'
+      });
+    }
+
+    // Delete review
+    const { error } = await supabase
+      .from('product_reviews')
+      .delete()
+      .eq('id', reviewId);
+
+    if (error) throw error;
 
     res.json({
+      success: true,
       message: 'Review deleted successfully'
     });
   } catch (error) {
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: error.message
-      });
-    }
-    if (error.message.includes('Unauthorized')) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: error.message
-      });
-    }
-    next(error);
-  }
-};
-
-/**
- * Get reviews for a product
- * GET /api/products/:productId/reviews
- */
-const getProductReviews = async (req, res, next) => {
-  try {
-    const { rating, verifiedOnly, limit } = req.query;
-
-    const reviews = await reviewService.getProductReviews(req.params.productId, {
-      rating,
-      verifiedOnly: verifiedOnly === 'true',
-      limit
+    console.error('Error deleting review:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete review',
+      error: error.message
     });
-
-    res.json(reviews);
-  } catch (error) {
-    next(error);
   }
 };
 
-/**
- * REQUIREMENT 3: Get product rating statistics
- * GET /api/products/:productId/rating-stats
- */
-const getProductRatingStats = async (req, res, next) => {
+// Mark review as helpful
+exports.markReviewHelpful = async (req, res) => {
   try {
-    const stats = await reviewService.getProductRatingStats(req.params.productId);
-    res.json(stats);
-  } catch (error) {
-    next(error);
-  }
-};
+    const { reviewId } = req.params;
+    const userId = req.user.id;
 
-/**
- * Get user's reviews
- * GET /api/reviews/my-reviews
- */
-const getMyReviews = async (req, res, next) => {
-  try {
-    const reviews = await reviewService.getUserReviews(req.user.id);
-    res.json(reviews);
-  } catch (error) {
-    next(error);
-  }
-};
+    // Check if user already voted
+    const { data: existingVote, error: checkError } = await supabase
+      .from('review_helpful_votes')
+      .select('*')
+      .eq('review_id', reviewId)
+      .eq('user_id', userId)
+      .single();
 
-/**
- * Get review by ID
- * GET /api/reviews/:id
- */
-const getReviewById = async (req, res, next) => {
-  try {
-    const review = await reviewService.findById(req.params.id);
+    if (existingVote) {
+      // Remove vote (toggle)
+      const { error } = await supabase
+        .from('review_helpful_votes')
+        .delete()
+        .eq('review_id', reviewId)
+        .eq('user_id', userId);
 
-    if (!review) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Review not found'
+      if (error) throw error;
+
+      return res.json({
+        success: true,
+        message: 'Helpful vote removed',
+        action: 'removed'
       });
     }
 
-    res.json(review);
-  } catch (error) {
-    next(error);
-  }
-};
+    // Add vote
+    const { error } = await supabase
+      .from('review_helpful_votes')
+      .insert({
+        review_id: reviewId,
+        user_id: userId
+      });
 
-/**
- * REQUIREMENT 4: Get pending reviews (Admin only)
- * GET /api/admin/reviews/pending
- */
-const getPendingReviews = async (req, res, next) => {
-  try {
-    const { limit } = req.query;
-    const reviews = await reviewService.getPendingReviews({ limit });
-    res.json(reviews);
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * REQUIREMENT 4: Approve review (Admin only)
- * POST /api/admin/reviews/:id/approve
- */
-const approveReview = async (req, res, next) => {
-  try {
-    const review = await reviewService.approveReview(req.params.id, req.user.id);
+    if (error) throw error;
 
     res.json({
-      message: 'Review approved successfully',
-      review
+      success: true,
+      message: 'Review marked as helpful',
+      action: 'added'
     });
   } catch (error) {
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: error.message
-      });
-    }
-    next(error);
+    console.error('Error marking review as helpful:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark review as helpful',
+      error: error.message
+    });
   }
 };
 
-/**
- * REQUIREMENT 4: Reject review (Admin only)
- * POST /api/admin/reviews/:id/reject
- */
-const rejectReview = async (req, res, next) => {
+// Check if user can review product
+exports.canReviewProduct = async (req, res) => {
   try {
-    const review = await reviewService.rejectReview(req.params.id, req.user.id);
+    const { productId } = req.params;
+    const userId = req.user.id;
+
+    // Check if user has purchased
+    const { data: orders, error: orderError } = await supabase
+      .from('orders')
+      .select('id, order_items!inner(product_id)')
+      .eq('user_id', userId)
+      .eq('order_items.product_id', productId)
+      .eq('status', 'delivered');
+
+    if (orderError) throw orderError;
+
+    const hasPurchased = orders && orders.length > 0;
+
+    // Check if user has already reviewed
+    const { data: review, error: reviewError } = await supabase
+      .from('product_reviews')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('product_id', productId)
+      .single();
+
+    const hasReviewed = !!review;
 
     res.json({
-      message: 'Review rejected successfully',
-      review
+      success: true,
+      canReview: !hasReviewed,
+      hasPurchased,
+      hasReviewed
     });
   } catch (error) {
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: error.message
-      });
-    }
-    next(error);
-  }
-};
-
-/**
- * Get all reviews (Admin only)
- * GET /api/admin/reviews
- */
-const getAllReviews = async (req, res, next) => {
-  try {
-    const { status, productId, limit, offset } = req.query;
-
-    const reviews = await reviewService.getAllReviews({
-      status,
-      productId,
-      limit,
-      offset
+    console.error('Error checking review eligibility:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check review eligibility',
+      error: error.message
     });
-
-    res.json(reviews);
-  } catch (error) {
-    next(error);
   }
-};
-
-/**
- * Get review statistics (Admin only)
- * GET /api/admin/reviews/statistics
- */
-const getStatistics = async (req, res, next) => {
-  try {
-    const stats = await reviewService.getReviewStatistics();
-    res.json(stats);
-  } catch (error) {
-    next(error);
-  }
-};
-
-module.exports = {
-  createReview,
-  updateReview,
-  deleteReview,
-  getProductReviews,
-  getProductRatingStats,
-  getMyReviews,
-  getReviewById,
-  getPendingReviews,
-  approveReview,
-  rejectReview,
-  getAllReviews,
-  getStatistics
 };

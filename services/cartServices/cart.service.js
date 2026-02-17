@@ -25,15 +25,6 @@ const getCart = async (userId) => {
         price,
         image_url,
         status
-      ),
-      variant:product_variants(
-        id,
-        variant_name,
-        sku,
-        price,
-        attributes,
-        images,
-        is_available
       )
     `)
     .eq('user_id', userId)
