@@ -11,6 +11,60 @@ const sellerOrderController = require('../../controllers/sellerControllers/selle
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireSeller, requireAnyRole } = require('../../middlewares/role.middleware');
 
+// ===== PUBLIC ROUTES =====
+
+// Public: Browse all sellers (no authentication required)
+router.get('/api/sellers/browse', async (req, res, next) => {
+  try {
+    const supabase = require('../../config/supabase');
+    const { limit = 50, search } = req.query;
+    
+    let query = supabase
+      .from('users')
+      .select('id, display_name, email, business_name, created_at')
+      .eq('role', 'seller')
+      .eq('status', 'active');
+    
+    // Add search if provided
+    if (search) {
+      query = query.or(`display_name.ilike.%${search}%,business_name.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+    
+    query = query.order('created_at', { ascending: false }).limit(parseInt(limit));
+    
+    const { data: sellers, error } = await query;
+    
+    if (error) throw error;
+    
+    // Get product counts for each seller
+    const sellersWithStats = await Promise.all(
+      (sellers || []).map(async (seller) => {
+        const { data: products } = await supabase
+          .from('products')
+          .select('id', { count: 'exact' })
+          .eq('seller_id', seller.id)
+          .eq('approval_status', 'approved');
+        
+        return {
+          ...seller,
+          store_name: seller.business_name || seller.display_name,
+          total_products: products?.length || 0
+        };
+      })
+    );
+    
+    res.status(200).json({
+      success: true,
+      count: sellersWithStats.length,
+      data: sellersWithStats
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== AUTHENTICATED ROUTES =====
+
 // Seller registration (authenticated users can upgrade to seller)
 router.post('/api/seller/register', authenticate, sellerController.registerSeller);
 

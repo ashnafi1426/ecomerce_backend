@@ -206,44 +206,125 @@ const getSubcategories = async (req, res, next) => {
 
 /**
  * Get products in category
- * GET /api/categories/:id/products
+ * GET /api/categories/:slugOrId/products
+ * Supports both category slug (e.g., 'electronics') and ID (e.g., '1')
  */
 const getCategoryProducts = async (req, res, next) => {
   try {
     const supabase = require('../../config/supabase');
-    const { id } = req.params;
-    const { limit = 20, offset = 0, status = 'approved' } = req.query;
+    const { id: slugOrId } = req.params;
+    const { limit = 50, offset = 0, status = 'approved', sort = 'featured' } = req.query;
 
+    // First, find the category by slug or ID
+    let categoryQuery;
+    
+    // Check if slugOrId is a number (ID) or string (slug)
+    if (!isNaN(slugOrId)) {
+      // It's an ID
+      categoryQuery = supabase
+        .from('categories')
+        .select('id, name, slug')
+        .eq('id', slugOrId)
+        .single();
+    } else {
+      // It's a slug
+      categoryQuery = supabase
+        .from('categories')
+        .select('id, name, slug')
+        .eq('slug', slugOrId)
+        .single();
+    }
+
+    const { data: category, error: categoryError } = await categoryQuery;
+
+    if (categoryError) {
+      console.error('Category lookup error:', categoryError);
+      return res.status(404).json({
+        success: false,
+        error: 'Not Found',
+        message: `Category '${slugOrId}' not found`
+      });
+    }
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        error: 'Not Found',
+        message: `Category '${slugOrId}' not found`
+      });
+    }
+
+    // Now fetch products for this category
     let query = supabase
       .from('products')
       .select(`
         *,
-        seller:users!seller_id(id, email),
+        seller:users!seller_id(id, email, display_name),
         inventory(quantity)
       `)
-      .eq('category_id', id)
-      .order('created_at', { ascending: false });
+      .eq('category_id', category.id);
 
+    // Filter by approval status
     if (status !== 'all') {
       query = query.eq('approval_status', status);
     }
 
+    // Apply sorting
+    switch (sort) {
+      case 'featured':
+        query = query.order('created_at', { ascending: false });
+        break;
+      case 'price_asc':
+        query = query.order('price', { ascending: true });
+        break;
+      case 'price_desc':
+        query = query.order('price', { ascending: false });
+        break;
+      case 'name':
+        query = query.order('name', { ascending: true });
+        break;
+      case 'newest':
+        query = query.order('created_at', { ascending: false });
+        break;
+      default:
+        query = query.order('created_at', { ascending: false });
+    }
+
+    // Apply pagination
     if (limit) {
       query = query.range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
     }
 
     const { data: products, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      console.error('Products fetch error:', error);
+      throw error;
+    }
 
     res.json({
       success: true,
+      category: {
+        id: category.id,
+        name: category.name,
+        slug: category.slug
+      },
       count: products?.length || 0,
-      data: products || []
+      products: products || [],
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: products?.length === parseInt(limit)
+      }
     });
   } catch (error) {
     console.error('Error in getCategoryProducts:', error);
-    next(error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: 'Failed to fetch category products',
+      details: error.message
+    });
   }
 };
 

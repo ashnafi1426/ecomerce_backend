@@ -66,6 +66,18 @@ const wishlistRouter = require('./wishlistRoutes/wishlist.routes');
 // Live Chat System
 const chatRouter = require('./chatRoutes/chat.routes');
 
+// Deals System
+const dealRouter = require('./dealRoutes/deal.routes');
+
+// Recommendations System
+const recommendationRouter = require('./recommendationRoutes/recommendation.routes');
+
+// Browsing History System
+const browsingHistoryRouter = require('./browsingHistoryRoutes/browsing-history.routes');
+
+// Support System
+const supportRouter = require('./supportRoutes/support.routes');
+
 // Add routes to the main router
 router.use('/api/auth', authRouter); // Mount auth routes with prefix
 router.use(userRouter);
@@ -126,6 +138,18 @@ router.use('/api/wishlist', wishlistRouter);
 
 // Live Chat System
 router.use('/api/chat', chatRouter);
+
+// Deals System
+router.use('/api/deals', dealRouter);
+
+// Recommendations System
+router.use('/api/recommendations', recommendationRouter);
+
+// Browsing History System
+router.use('/api/browsing-history', browsingHistoryRouter);
+
+// Support System
+router.use('/api/support', supportRouter);
 
 // Export the router
 module.exports = router;
