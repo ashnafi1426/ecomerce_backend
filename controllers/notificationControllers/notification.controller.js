@@ -8,9 +8,23 @@ const notificationService = require('../../services/notificationServices/notific
 /**
  * Get user notifications
  * GET /api/notifications
+ * 
+ * ENHANCED with better error handling and logging
  */
 async function getNotifications(req, res) {
   try {
+    console.log('[Notification Controller] Fetching notifications for user:', req.user?.id);
+    
+    // Validate user authentication
+    if (!req.user || !req.user.id) {
+      console.error('[Notification Controller] ❌ No user found in request');
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        error: 'User not authenticated'
+      });
+    }
+
     const userId = req.user.id;
     const {
       limit = 50,
@@ -21,6 +35,15 @@ async function getNotifications(req, res) {
       includeArchived = false
     } = req.query;
 
+    console.log('[Notification Controller] Query params:', {
+      limit,
+      offset,
+      unreadOnly,
+      type,
+      priority,
+      includeArchived
+    });
+
     const result = await notificationService.getUserNotifications(userId, {
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -30,16 +53,21 @@ async function getNotifications(req, res) {
       includeArchived: includeArchived === 'true'
     });
 
+    console.log('[Notification Controller] ✅ Fetched', result?.notifications?.length || 0, 'notifications');
+
     res.status(200).json({
       success: true,
       data: result
     });
   } catch (error) {
-    console.error('[Notification Controller] Error getting notifications:', error);
+    console.error('[Notification Controller] ❌ Error getting notifications:', error);
+    console.error('[Notification Controller] Error stack:', error.stack);
+    
     res.status(500).json({
       success: false,
       message: 'Failed to fetch notifications',
-      error: error.message
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }
