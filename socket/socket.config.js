@@ -14,11 +14,12 @@ const userService = require('../services/userServices/user.service');
  * @returns {Object} Socket.IO server instance
  */
 function initializeSocketServer(httpServer) {
-  // Allow multiple frontend origins for development
+  // Allow multiple frontend origins for development and production
   const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173',
+    'https://ecomerce-client-l64h.vercel.app',
     process.env.FRONTEND_URL
   ].filter(Boolean); // Remove undefined values
 
