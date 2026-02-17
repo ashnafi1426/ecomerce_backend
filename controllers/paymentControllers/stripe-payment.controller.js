@@ -189,8 +189,8 @@ const createPaymentIntent = async (req, res) => {
  * Create Order After Payment Success
  * POST /api/payments/create-order
  * 
- * Called after Stripe payment succeeds to create order and split by sellers
- * Handles everything synchronously without webhooks
+ * OPTIMIZED VERSION - Returns immediately after order creation
+ * Heavy operations (splitting, notifications) run in background
  */
 const createOrderAfterPayment = async (req, res) => {
   try {
@@ -272,7 +272,7 @@ const createOrderAfterPayment = async (req, res) => {
       });
     }
 
-    console.log('[Order Creation] Order created:', order.id);
+    console.log('[Order Creation] ✅ Order created:', order.id);
 
     // Update payment record with order ID and status
     await supabase
@@ -284,86 +284,78 @@ const createOrderAfterPayment = async (req, res) => {
       })
       .eq('id', paymentRecord.id);
 
-    // Create notification for customer about order placement
-    try {
-      // Only create notification for registered users (not guests)
-      if (userId) {
-        await notificationService.createNotification({
-          user_id: userId,
-          type: 'order_placed',
-          title: 'Order Placed Successfully',
-          message: `Your order #${order.id.substring(0, 8)} has been placed successfully`,
-          priority: 'high',
-          metadata: { 
-            order_id: order.id,
-            amount: paymentRecord.amount / 100,
-            items_count: paymentRecord.metadata.items.length
-          },
-          action_url: `/orders/${order.id}`,
-          action_text: 'View Order',
-          channels: ['in_app', 'email']
-        });
-        console.log(`[Order Creation] Customer notification created for order ${order.id}`);
-      } else {
-        console.log(`[Order Creation] Skipping notification for guest order ${order.id}`);
-      }
-    } catch (notifError) {
-      console.error('[Order Creation] Error creating customer notification:', notifError);
-      // Don't fail order creation if notification fails
-    }
-
-    // Split order by sellers and create earnings
-    const splitResult = await splitOrderBySellers(order.id, paymentRecord.metadata.items);
-
-    console.log('[Order Creation] Order splitting result:', splitResult);
-
-    // Check if splitting failed
-    if (!splitResult.success) {
-      console.error('[Order Creation] ⚠️  Order splitting failed:', splitResult.error);
-      // Still return success for the order, but include warning
-      return res.json({
-        success: true,
-        order_id: order.id,
-        payment_status: 'succeeded',
-        warning: 'Order created but earnings tracking failed',
-        split_error: splitResult.error
-      });
-    }
-
-    // Notify sellers about new orders (in-app + email)
-    try {
-      // Get sub-orders with seller information
-      const { data: subOrders } = await supabase
-        .from('sub_orders')
-        .select('id, seller_id, items, subtotal, total_amount')
-        .eq('parent_order_id', order.id);
-
-      if (subOrders && subOrders.length > 0) {
-        // Format sub-orders for notification
-        const formattedSubOrders = subOrders.map(so => ({
-          sub_order_id: so.id,
-          seller_id: so.seller_id,
-          item_count: so.items?.length || 0,
-          subtotal: so.total_amount / 100, // Convert cents to dollars
-          items: so.items || []
-        }));
-
-        await notifySellers(formattedSubOrders, order.id);
-        console.log(`[Order Creation] Seller notifications sent for ${subOrders.length} seller(s)`);
-      }
-    } catch (notifError) {
-      console.error('[Order Creation] Error notifying sellers:', notifError);
-      // Don't fail order creation if notification fails
-    }
-
-    // Update inventory (reduce stock)
-    await updateInventoryAfterPurchase(paymentRecord.metadata.items);
-
+    // ⚡ OPTIMIZATION: Return response immediately
+    // Heavy operations run in background
     res.json({
       success: true,
       order_id: order.id,
       payment_status: 'succeeded',
-      split_result: splitResult
+      message: 'Order created successfully. Processing details in background.'
+    });
+
+    // ⚡ BACKGROUND PROCESSING - Runs after response is sent
+    // This prevents the user from waiting for slow operations
+    setImmediate(async () => {
+      try {
+        console.log('[Background] Starting post-order processing for:', order.id);
+
+        // 1. Split order by sellers and create earnings
+        const splitResult = await splitOrderBySellers(order.id, paymentRecord.metadata.items);
+        console.log('[Background] Order splitting result:', splitResult);
+
+        // 2. Create customer notification (non-blocking)
+        if (userId) {
+          notificationService.createNotification({
+            user_id: userId,
+            type: 'order_placed',
+            title: 'Order Placed Successfully',
+            message: `Your order #${order.id.substring(0, 8)} has been placed successfully`,
+            priority: 'high',
+            metadata: { 
+              order_id: order.id,
+              amount: paymentRecord.amount / 100,
+              items_count: paymentRecord.metadata.items.length
+            },
+            action_url: `/orders/${order.id}`,
+            action_text: 'View Order',
+            channels: ['in_app', 'email']
+          }).catch(err => console.error('[Background] Customer notification error:', err));
+        }
+
+        // 3. Notify sellers (non-blocking)
+        if (splitResult.success) {
+          supabase
+            .from('sub_orders')
+            .select('id, seller_id, items, subtotal, total_amount')
+            .eq('parent_order_id', order.id)
+            .then(({ data: subOrders }) => {
+              if (subOrders && subOrders.length > 0) {
+                const formattedSubOrders = subOrders.map(so => ({
+                  sub_order_id: so.id,
+                  seller_id: so.seller_id,
+                  item_count: so.items?.length || 0,
+                  subtotal: so.total_amount / 100,
+                  items: so.items || []
+                }));
+                
+                notifySellers(formattedSubOrders, order.id)
+                  .then(() => console.log(`[Background] Seller notifications sent`))
+                  .catch(err => console.error('[Background] Seller notification error:', err));
+              }
+            })
+            .catch(err => console.error('[Background] Sub-orders fetch error:', err));
+        }
+
+        // 4. Update inventory (non-blocking)
+        updateInventoryAfterPurchase(paymentRecord.metadata.items)
+          .catch(err => console.error('[Background] Inventory update error:', err));
+
+        console.log('[Background] ✅ Post-order processing completed for:', order.id);
+
+      } catch (bgError) {
+        console.error('[Background] ❌ Error in background processing:', bgError);
+        // Background errors don't affect the order - it's already created
+      }
     });
 
   } catch (error) {
