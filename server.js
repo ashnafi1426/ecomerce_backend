@@ -5,9 +5,11 @@
  * and manages unhandled errors.
  */
 
-require('dotenv').config();
+const dotenv = require('dotenv');
 const app = require('./app');
 const { testConnection } = require('./config/supabase');
+
+dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 
@@ -49,6 +51,7 @@ const server = app.listen(PORT, () => {
 // SOCKET.IO INITIALIZATION
 // ============================================
 
+// Import Socket.IO modules (CommonJS modules)
 const { initializeSocketServer } = require('./socket/socket.config');
 const { initializeChatHandlers } = require('./socket/chat.handler');
 

@@ -181,3 +181,4 @@ module.exports = {
   processEarningsAvailability,
   triggerManually
 };
+

@@ -14,8 +14,6 @@ const userService = require('../services/userServices/user.service');
  */
 function initializeChatHandlers(io) {
   io.on('connection', (socket) => {
-    console.log(`[Chat] User connected: ${socket.userId} (${socket.userRole})`);
-
     // Update user online status
     chatService.updateOnlineStatus(socket.userId, true);
 

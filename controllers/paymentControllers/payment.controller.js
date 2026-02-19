@@ -1,7 +1,7 @@
-import { stripe, stripeConfig } from '../../config/stripe.js';
-import supabase from '../../config/supabase.js';
-import { splitOrderBySeller, notifySellers } from '../../services/orderServices/order-splitting-with-email.service.js';
-import notificationService from '../../services/notificationServices/notification.service.js';
+const { stripe, stripeConfig } = require('../../config/stripe');
+const supabase = require('../../config/supabase');
+const { splitOrderBySeller, notifySellers } = require('../../services/orderServices/order-splitting-with-email.service');
+const notificationService = require('../../services/notificationServices/notification.service');
 
 /**
  * FASTSHOP PAYMENT CONTROLLER - COMPLETE IMPLEMENTATION
@@ -23,7 +23,7 @@ import notificationService from '../../services/notificationServices/notificatio
  * Security: Recalculates all prices on backend
  * Never trusts frontend pricing
  */
-export const createPaymentIntent = async (req, res) => {
+const createPaymentIntent = async (req, res) => {
   try {
     const userId = req.user?.id; // Can be null for guest checkout
     const { cartItems, shippingAddress, billingAddress } = req.body;
@@ -201,7 +201,7 @@ export const createPaymentIntent = async (req, res) => {
  * Get Payment Status
  * GET /api/payments/:paymentIntentId
  */
-export const getPaymentStatus = async (req, res) => {
+const getPaymentStatus = async (req, res) => {
   try {
     const { paymentIntentId } = req.params;
 
@@ -234,7 +234,7 @@ export const getPaymentStatus = async (req, res) => {
  * Cancel Payment
  * POST /api/payments/:paymentIntentId/cancel
  */
-export const cancelPayment = async (req, res) => {
+const cancelPayment = async (req, res) => {
   try {
     const { paymentIntentId } = req.params;
     const userId = req.user?.id;
@@ -288,7 +288,7 @@ export const cancelPayment = async (req, res) => {
  * This endpoint is called by frontend after successful payment
  * It verifies the payment with Stripe before creating the order
  */
-export const createOrderAfterPayment = async (req, res) => {
+const createOrderAfterPayment = async (req, res) => {
   try {
     const userId = req.user?.id;
     const { paymentIntentId } = req.body;
@@ -460,6 +460,20 @@ export const createOrderAfterPayment = async (req, res) => {
       console.error('Error updating payment:', updateError);
     }
 
+    // 7.1. Clear user's cart after successful order creation
+    if (userId) {
+      try {
+        await supabase
+          .from('cart_items')
+          .delete()
+          .eq('user_id', userId);
+        console.log(`[Payment] Cart cleared for user: ${userId}`);
+      } catch (cartError) {
+        console.error('[Payment] Failed to clear cart:', cartError);
+        // Don't fail the order if cart clearing fails
+      }
+    }
+
     // 7.5. Create notification for customer about order placement
     try {
       // Only create notification for registered users (not guests)
@@ -527,7 +541,7 @@ export const createOrderAfterPayment = async (req, res) => {
  * ADMIN: Get all payments
  * GET /api/admin/payments
  */
-export const getAllPayments = async (req, res) => {
+const getAllPayments = async (req, res) => {
   try {
     const { status, userId, limit, offset } = req.query;
 
@@ -586,7 +600,7 @@ export const getAllPayments = async (req, res) => {
  * ADMIN: Get payment statistics
  * GET /api/admin/payments/statistics
  */
-export const getPaymentStatistics = async (req, res) => {
+const getPaymentStatistics = async (req, res) => {
   try {
     const { data: payments, error } = await supabase
       .from('payments')
@@ -633,7 +647,7 @@ export const getPaymentStatistics = async (req, res) => {
  * ADMIN: Process refund
  * POST /api/admin/payments/:id/refund
  */
-export const processRefund = async (req, res) => {
+const processRefund = async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, reason } = req.body;
@@ -710,4 +724,15 @@ export const processRefund = async (req, res) => {
       message: error.message 
     });
   }
+};
+
+
+module.exports = {
+  createPaymentIntent,
+  getPaymentStatus,
+  cancelPayment,
+  createOrderAfterPayment,
+  getAllPayments,
+  getPaymentStatistics,
+  processRefund
 };

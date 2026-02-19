@@ -2901,6 +2901,30 @@ const exportCustomersPDF = async (req, res, next) => {
   }
 };
 
+// ============================================
+// REPORTS
+// ============================================
+
+/**
+ * Get all reports
+ * GET /api/admin/reports
+ */
+const getReports = async (req, res, next) => {
+  try {
+    // Return empty array for now - can be populated with actual report data later
+    const reports = [];
+    
+    res.json({
+      success: true,
+      reports: reports,
+      message: 'Reports retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching reports:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   // Products
   getAllProducts,
@@ -2969,6 +2993,9 @@ module.exports = {
   getDashboard,
   
   // Analytics Export
-  exportAnalyticsReport
+  exportAnalyticsReport,
+  
+  // Reports
+  getReports
 };
 

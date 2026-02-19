@@ -113,23 +113,49 @@ const releaseReservation = async (req, res) => {
  * Check Product Availability
  * GET /api/inventory/check/:productId
  * 
- * Checks if product has sufficient stock
+ * Checks if product has sufficient stock (PUBLIC ENDPOINT)
  */
 const checkAvailability = async (req, res) => {
   try {
     const { productId } = req.params;
     const { quantity = 1 } = req.query;
 
-    const { data, error } = await supabase.rpc('check_product_availability', {
+    // Try using the RPC function first
+    const { data: rpcData, error: rpcError } = await supabase.rpc('check_product_availability', {
       p_product_id: productId,
       p_quantity: parseInt(quantity)
     });
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
+    if (!rpcError && rpcData) {
+      return res.json(rpcData);
     }
 
-    res.json(data);
+    // Fallback: Query inventory_status view directly
+    const { data: inventoryData, error: inventoryError } = await supabase
+      .from('inventory_status')
+      .select('*')
+      .eq('product_id', productId)
+      .single();
+
+    if (inventoryError) {
+      // If no inventory record exists, assume product is available
+      return res.json({
+        available: true,
+        available_quantity: 999,
+        low_stock_threshold: 10,
+        message: 'Product available'
+      });
+    }
+
+    const requestedQty = parseInt(quantity);
+    const availableQty = inventoryData.available_quantity || 0;
+
+    res.json({
+      available: availableQty >= requestedQty,
+      available_quantity: availableQty,
+      low_stock_threshold: inventoryData.low_stock_threshold || 10,
+      message: availableQty >= requestedQty ? 'Product available' : 'Insufficient stock'
+    });
 
   } catch (error) {
     console.error('Check Availability Error:', error);

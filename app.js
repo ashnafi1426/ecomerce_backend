@@ -5,8 +5,7 @@
  * rate limiting, and centralized error handling.
  */
 
-require('dotenv').config();
-
+const dotenv = require('dotenv');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -14,14 +13,13 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const compression = require('compression');
 
-// Import centralized router
-const router = require('./routes');
-
-// Import error middleware
-const errorMiddleware = require('./middlewares/error.middleware');
+// Import centralized router (CommonJS module)
+const router = require('./routes/index');
 
 // Import job scheduler
-const { initializeJobs } = require('./jobs');
+const { initializeJobs } = require('./jobs/index');
+
+dotenv.config();
 
 const app = express();
 
@@ -58,32 +56,28 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// ============================================
-// CORS CONFIGURATION
-// ============================================
-// Configure CORS for production deployment
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:5173',
-  'https://ecomerce-client-l64h.vercel.app',
-  process.env.FRONTEND_URL
-].filter(Boolean); // Remove undefined values
-
+// CORS Configuration - Allow frontend to access API
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, curl)
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.includes(origin)) {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      process.env.FRONTEND_URL
+    ].filter(Boolean); // Remove undefined values
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.warn(`[CORS] Blocked origin: ${origin}`);
-      callback(null, true); // Allow all origins in production for now
+      callback(null, true); // Allow all origins in development
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   maxAge: 86400 // 24 hours
@@ -103,12 +97,21 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// HTTP request logging
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
-}
+// HTTP request logging - DISABLED for performance
+// Logging creates too much output and slows down the system
+// Only log errors and important events
+const skipMostRequests = (req, res) => {
+  // Only log errors (4xx, 5xx status codes)
+  return res.statusCode < 400;
+};
+
+// Disable HTTP request logging completely for better performance
+// Uncomment below if you need error-only logging
+// if (process.env.NODE_ENV === 'development') {
+//   app.use(morgan('dev', { skip: skipMostRequests }));
+// } else {
+//   app.use(morgan('combined', { skip: skipMostRequests }));
+// }
 
 // ============================================
 // API ROUTES

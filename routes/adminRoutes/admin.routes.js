@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../../controllers/adminControllers/admin.controller');
+const commissionController = require('../../controllers/commissionControllers/commission.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
@@ -94,5 +95,13 @@ router.put('/settings', authenticate, requireAdmin, adminController.updateSettin
 
 // Analytics PDF Export
 router.get('/analytics/export', authenticate, requireAdmin, adminController.exportAnalyticsReport);
+
+// Reports
+router.get('/reports', authenticate, requireAdmin, adminController.getReports);
+
+// Commission Settings
+router.get('/commission-settings', authenticate, requireAdmin, commissionController.getCommissionSettings);
+router.put('/commission-settings', authenticate, requireAdmin, commissionController.updateCommissionSettings);
+router.get('/commission-analytics', authenticate, requireAdmin, commissionController.getCommissionAnalytics);
 
 module.exports = router;

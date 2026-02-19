@@ -93,11 +93,14 @@ async function createPendingProduct() {
     console.log('\n📝 Step 3: Creating Pending Product');
     console.log('-'.repeat(70));
     
+    // Inline SVG placeholder (no network requests, works offline)
+    const INLINE_SVG_PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect width="400" height="400" fill="%23FF9900"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="%23ffffff"%3EPending Product%3C/text%3E%3C/svg%3E';
+    
     const productData = {
       title: `Test Product ${Date.now()}`,
       description: 'This is a test product for approval testing - created via script',
       price: 149.99,
-      image_url: 'https://via.placeholder.com/400x400/FF9900/ffffff?text=Pending+Product',
+      image_url: INLINE_SVG_PLACEHOLDER,
       seller_id: seller.id,
       store_id: storeId,
       status: 'active',

@@ -524,3 +524,19 @@ module.exports = {
   rejectProduct
 };
 
+
+/**
+ * Get price range for filters
+ * GET /api/products/price-range
+ */
+const getPriceRange = async (req, res, next) => {
+  try {
+    const result = await productService.getPriceRange();
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update exports
+module.exports.getPriceRange = getPriceRange;

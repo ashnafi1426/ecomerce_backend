@@ -1,5 +1,5 @@
-import { stripe } from '../../config/stripe.js';
-import pool from '../../config/database.js';
+const { stripe } = require('../../config/stripe');
+const pool = require('../../config/database');
 
 /**
  * Stripe Webhook Handler
@@ -8,7 +8,7 @@ import pool from '../../config/database.js';
  * CRITICAL: This is where orders are actually created
  * Never create orders before webhook confirmation
  */
-export const handleStripeWebhook = async (req, res) => {
+const handleStripeWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -254,4 +254,5 @@ async function handleRefund(client, charge) {
   // TODO: Send refund confirmation email
 }
 
-export default handleStripeWebhook;
+module.exports = handleStripeWebhook;
+module.exports.handleStripeWebhook = handleStripeWebhook;

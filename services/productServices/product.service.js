@@ -136,12 +136,15 @@ const create = async (productData) => {
       throw new Error('Price must be a valid positive number');
     }
     
+    // Inline SVG placeholder (no network requests, works offline)
+    const DEFAULT_PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect width="400" height="400" fill="%23f0f0f0"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="%23999"%3EProduct%3C/text%3E%3C/svg%3E';
+    
     // Prepare product data with safe defaults
     const insertData = {
       title: productData.title.trim(),
       description: productData.description.trim(),
       price: price,
-      image_url: productData.imageUrl || 'https://via.placeholder.com/400x400/667eea/ffffff?text=Product',
+      image_url: productData.imageUrl || DEFAULT_PLACEHOLDER,
       category_id: productData.categoryId || null,
       seller_id: productData.sellerId,
       status: productData.status || 'active',
@@ -378,3 +381,34 @@ module.exports = {
   updateInventory,
   getLowStock
 };
+
+/**
+ * Get price range for filters
+ */
+async function getPriceRange() {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('price')
+      .eq('approval_status', 'approved')
+      .eq('status', 'active')
+      .order('price', { ascending: true });
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      return { min: 0, max: 0 };
+    }
+
+    const prices = data.map(p => p.price);
+    return {
+      min: Math.min(...prices),
+      max: Math.max(...prices)
+    };
+  } catch (error) {
+    console.error('Get price range error:', error);
+    throw error;
+  }
+}
+
+module.exports.getPriceRange = getPriceRange;

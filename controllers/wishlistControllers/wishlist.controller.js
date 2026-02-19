@@ -1,4 +1,4 @@
-const { supabase } = require('../../config/supabase');
+const supabase = require('../../config/supabase');
 
 const wishlistController = {
   // Get user's wishlist
@@ -7,20 +7,19 @@ const wishlistController = {
       console.log('🔍 Getting wishlist for user:', req.user.id);
       
       const { data: wishlistItems, error } = await supabase
-        .from('wishlist')
+        .from('wishlists')
         .select(`
           id,
           product_id,
           created_at,
           products (
             id,
-            name,
+            title,
             price,
-            image,
-            rating,
-            reviews_count,
-            status,
-            stock_quantity
+            image_url,
+            average_rating,
+            total_reviews,
+            status
           )
         `)
         .eq('user_id', req.user.id)
@@ -70,7 +69,7 @@ const wishlistController = {
       // Check if product exists
       const { data: product, error: productError } = await supabase
         .from('products')
-        .select('id, name, status')
+        .select('id, title, status')
         .eq('id', productId)
         .single();
 
@@ -91,7 +90,7 @@ const wishlistController = {
 
       // Add to wishlist (will ignore if already exists due to unique constraint)
       const { data: wishlistItem, error } = await supabase
-        .from('wishlist')
+        .from('wishlists')
         .insert({
           user_id: userId,
           product_id: productId
@@ -147,7 +146,7 @@ const wishlistController = {
       }
 
       const { data: deletedItem, error } = await supabase
-        .from('wishlist')
+        .from('wishlists')
         .delete()
         .eq('user_id', userId)
         .eq('product_id', productId)
@@ -194,7 +193,7 @@ const wishlistController = {
       console.log('🔍 Clearing wishlist for user:', userId);
 
       const { data: deletedItems, error } = await supabase
-        .from('wishlist')
+        .from('wishlists')
         .delete()
         .eq('user_id', userId)
         .select();
@@ -234,7 +233,7 @@ const wishlistController = {
       console.log('🔍 Checking wishlist status:', { userId, productId });
 
       const { data: wishlistItem, error } = await supabase
-        .from('wishlist')
+        .from('wishlists')
         .select('id')
         .eq('user_id', userId)
         .eq('product_id', productId)
@@ -275,7 +274,7 @@ const wishlistController = {
       console.log('🔍 Getting wishlist count for user:', userId);
 
       const { count, error } = await supabase
-        .from('wishlist')
+        .from('wishlists')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId);
 

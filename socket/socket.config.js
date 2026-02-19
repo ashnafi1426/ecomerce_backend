@@ -48,8 +48,6 @@ function initializeSocketServer(httpServer) {
     try {
       const token = socket.handshake.auth.token;
 
-      console.log('[Socket.IO] Auth attempt - Token present:', !!token);
-
       if (!token) {
         const error = new Error('No token provided');
         error.data = { type: 'authentication_error' };
@@ -60,7 +58,6 @@ function initializeSocketServer(httpServer) {
       let decoded;
       try {
         decoded = verifyToken(token);
-        console.log('[Socket.IO] Token verified for user:', decoded.userId);
       } catch (jwtError) {
         console.error('[Socket.IO] JWT verification failed:', jwtError.message);
         const error = new Error('Invalid or expired token');
@@ -91,7 +88,6 @@ function initializeSocketServer(httpServer) {
       socket.userEmail = user.email;
       socket.displayName = user.display_name;
 
-      console.log('[Socket.IO] Authentication successful:', user.email, user.role);
       next();
     } catch (error) {
       console.error('[Socket.IO] Unexpected authentication error:', error);

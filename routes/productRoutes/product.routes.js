@@ -18,6 +18,9 @@ const { requireSeller, requireManager, requireMinRole } = require('../../middlew
 // Browse products (only approved products visible)
 router.get('/api/products', optionalAuthenticate, productController.getAllProducts);
 
+// Get price range for filters (MUST be before :id route)
+router.get('/api/products/price-range', productController.getPriceRange);
+
 // Search products (role-based visibility with optional auth)
 router.get('/api/products/search', optionalAuthenticate, productController.searchProducts);
 

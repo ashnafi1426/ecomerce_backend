@@ -284,6 +284,20 @@ const createOrderAfterPayment = async (req, res) => {
       })
       .eq('id', paymentRecord.id);
 
+    // Clear user's cart after successful order creation
+    if (userId) {
+      try {
+        await supabase
+          .from('cart_items')
+          .delete()
+          .eq('user_id', userId);
+        console.log('[Order Creation] ✅ Cart cleared for user:', userId);
+      } catch (cartError) {
+        console.error('[Order Creation] ⚠️ Failed to clear cart:', cartError);
+        // Don't fail the order if cart clearing fails
+      }
+    }
+
     // ⚡ OPTIMIZATION: Return response immediately
     // Heavy operations run in background
     res.json({

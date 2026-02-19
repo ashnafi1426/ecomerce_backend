@@ -16,11 +16,8 @@ const notificationService = require('../../services/notificationServices/notific
  */
 async function getNotifications(req, res) {
   try {
-    console.log('[Notification Controller] Fetching notifications for user:', req.user?.id);
-    
     // Validate user authentication
     if (!req.user || !req.user.id) {
-      console.error('[Notification Controller] ❌ No user found in request');
       return res.status(401).json({
         success: false,
         message: 'Authentication required',
@@ -38,15 +35,6 @@ async function getNotifications(req, res) {
       includeArchived = false
     } = req.query;
 
-    console.log('[Notification Controller] Query params:', {
-      limit,
-      offset,
-      unreadOnly,
-      type,
-      priority,
-      includeArchived
-    });
-
     const result = await notificationService.getUserNotifications(userId, {
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -56,15 +44,12 @@ async function getNotifications(req, res) {
       includeArchived: includeArchived === 'true'
     });
 
-    console.log('[Notification Controller] ✅ Fetched', result?.notifications?.length || 0, 'notifications');
-
     res.status(200).json({
       success: true,
       data: result
     });
   } catch (error) {
-    console.error('[Notification Controller] ❌ Error getting notifications:', error);
-    console.error('[Notification Controller] Error stack:', error.stack);
+    console.error('[Notification Controller] Error getting notifications:', error);
     
     res.status(500).json({
       success: false,

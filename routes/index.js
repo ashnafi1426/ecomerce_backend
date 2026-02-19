@@ -78,6 +78,18 @@ const browsingHistoryRouter = require('./browsingHistoryRoutes/browsing-history.
 // Support System
 const supportRouter = require('./supportRoutes/support.routes');
 
+// Advanced Search & Filtering System (Amazon-style)
+const searchRouter = require('./searchRoutes/search.routes');
+const brandRouter = require('./brandRoutes/brand.routes');
+
+// Amazon PDP Enhancement Routes
+const productFeatureRouter = require('./productFeatureRoutes/product-feature.routes');
+const productSpecRouter = require('./productSpecRoutes/product-spec.routes');
+const productImageRouter = require('./productImageRoutes/product-image.routes');
+const reviewEnhancedRouter = require('./reviewRoutes/review-enhanced.routes');
+const questionRouter = require('./questionRoutes/question.routes');
+const badgeRouter = require('./badgeRoutes/badge.routes');
+
 // Add routes to the main router
 router.use('/api/auth', authRouter); // Mount auth routes with prefix
 router.use(userRouter);
@@ -151,5 +163,19 @@ router.use('/api/browsing-history', browsingHistoryRouter);
 // Support System
 router.use('/api/support', supportRouter);
 
+// Advanced Search & Filtering System (Amazon-style)
+router.use('/api/search', searchRouter);
+router.use('/api/brands', brandRouter);
+
+// Amazon PDP Enhancement Routes
+router.use('/api/products', productFeatureRouter);
+router.use('/api/products', productSpecRouter);
+router.use('/api/products', productImageRouter);
+router.use('/api/products', reviewEnhancedRouter);
+router.use('/api/products', questionRouter);
+router.use('/api/products', badgeRouter);
+
 // Export the router
 module.exports = router;
+
+

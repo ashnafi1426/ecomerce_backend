@@ -79,7 +79,4 @@ const stopAllJobs = (jobs) => {
   console.log('[Jobs] All jobs stopped\n');
 };
 
-module.exports = {
-  initializeJobs,
-  stopAllJobs
-};
+module.exports = { initializeJobs, stopAllJobs };
