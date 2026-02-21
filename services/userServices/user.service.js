@@ -516,7 +516,7 @@ const searchUsersForChat = async (query, role = null, limit = 20) => {
       .select(`
         id,
         email,
-        full_name,
+        display_name,
         role,
         status,
         created_at,
@@ -537,7 +537,7 @@ const searchUsersForChat = async (query, role = null, limit = 20) => {
     if (query && query.trim()) {
       queryBuilder = queryBuilder.or(`
         email.ilike.%${query}%,
-        full_name.ilike.%${query}%
+        display_name.ilike.%${query}%
       `);
     }
 
@@ -549,13 +549,57 @@ const searchUsersForChat = async (query, role = null, limit = 20) => {
     return data.map(user => ({
       id: user.id,
       email: user.email,
-      full_name: user.full_name,
+      display_name: user.display_name,
       role: user.role,
       store_name: user.stores?.[0]?.store_name || null,
       is_online: false // TODO: Get from online status tracking
     }));
   } catch (error) {
     console.error('[UserService] Error searching users for chat:', error);
+    throw error;
+  }
+};
+
+/**
+ * Find support user (admin or manager) for handling customer support conversations
+ * @returns {Promise<Object|null>} Support user object or null if none available
+ */
+const findSupportUser = async () => {
+  try {
+    // First, try to find an active admin user
+    const { data: adminUser, error: adminError } = await supabase
+      .from('users')
+      .select('id, email, display_name, role, status')
+      .eq('role', 'admin')
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+    
+    // If admin found, return it
+    if (!adminError && adminUser) {
+      return adminUser;
+    }
+    
+    // If no admin found, try to find an active manager user
+    const { data: managerUser, error: managerError } = await supabase
+      .from('users')
+      .select('id, email, display_name, role, status')
+      .eq('role', 'manager')
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+    
+    // If manager found, return it
+    if (!managerError && managerUser) {
+      return managerUser;
+    }
+    
+    // No support user available
+    return null;
+  } catch (error) {
+    console.error('[UserService] Error finding support user:', error);
     throw error;
   }
 };
@@ -575,6 +619,7 @@ module.exports = {
   getStatistics,
   search,
   searchUsersForChat,
+  findSupportUser,
   // Phase 2: Seller & Manager functions
   createSeller,
   createManager,

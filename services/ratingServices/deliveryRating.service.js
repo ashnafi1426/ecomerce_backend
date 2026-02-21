@@ -147,7 +147,7 @@ async function getOrderDeliveryRating(orderId) {
     .from('delivery_ratings')
     .select(`
       *,
-      seller:users!delivery_ratings_seller_id_fkey(id, full_name, email)
+      seller:users!delivery_ratings_seller_id_fkey(id, display_name, email)
     `)
     .eq('order_id', orderId);
   
@@ -289,8 +289,8 @@ async function getFlaggedRatings(filters = {}) {
     .select(`
       *,
       order:orders(id, payment_intent_id),
-      customer:users!delivery_ratings_customer_id_fkey(id, full_name, email),
-      seller:users!delivery_ratings_seller_id_fkey(id, full_name, email)
+      customer:users!delivery_ratings_customer_id_fkey(id, display_name, email),
+      seller:users!delivery_ratings_seller_id_fkey(id, display_name, email)
     `)
     .eq('is_flagged', true)
     .order('created_at', { ascending: false });

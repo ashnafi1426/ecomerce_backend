@@ -1556,6 +1556,107 @@ const getDashboard = async (req, res, next) => {
       ];
     }
 
+    // Get replacement and refund summary
+    let replacementSummary = {
+      pendingCount: 0,
+      totalRequests: 0,
+      approvalRate: 0,
+      avgProcessingTime: 0
+    };
+    
+    let refundSummary = {
+      pendingCount: 0,
+      totalRequests: 0,
+      approvalRate: 0,
+      avgProcessingTime: 0,
+      totalRefundAmount: 0
+    };
+
+    try {
+      console.log('🔍 Fetching replacement summary...');
+      
+      // Get replacement requests statistics
+      const { data: replacements, error: replacementsError } = await supabase
+        .from('replacement_requests')
+        .select('id, status, created_at, reviewed_at');
+
+      if (!replacementsError && replacements) {
+        replacementSummary.totalRequests = replacements.length;
+        replacementSummary.pendingCount = replacements.filter(r => r.status === 'pending').length;
+        
+        const completedReplacements = replacements.filter(r => 
+          ['approved', 'rejected'].includes(r.status) && r.reviewed_at
+        );
+        
+        if (completedReplacements.length > 0) {
+          const approvedCount = completedReplacements.filter(r => r.status === 'approved').length;
+          replacementSummary.approvalRate = Math.round((approvedCount / completedReplacements.length) * 100);
+          
+          // Calculate average processing time in hours
+          const totalProcessingTime = completedReplacements.reduce((sum, r) => {
+            const created = new Date(r.created_at);
+            const reviewed = new Date(r.reviewed_at);
+            return sum + (reviewed - created);
+          }, 0);
+          
+          replacementSummary.avgProcessingTime = Math.round(
+            (totalProcessingTime / completedReplacements.length) / (1000 * 60 * 60)
+          );
+        }
+        
+        console.log('✅ Replacement summary:', replacementSummary);
+      }
+    } catch (err) {
+      console.error('Error fetching replacement summary:', err.message);
+    }
+
+    try {
+      console.log('🔍 Fetching refund summary...');
+      
+      // Get refund requests statistics
+      const { data: refunds, error: refundsError } = await supabase
+        .from('refund_requests')
+        .select('id, status, refund_amount, created_at, reviewed_at');
+
+      if (!refundsError && refunds) {
+        refundSummary.totalRequests = refunds.length;
+        refundSummary.pendingCount = refunds.filter(r => r.status === 'pending').length;
+        
+        const completedRefunds = refunds.filter(r => 
+          ['approved', 'rejected', 'completed'].includes(r.status) && r.reviewed_at
+        );
+        
+        if (completedRefunds.length > 0) {
+          const approvedCount = completedRefunds.filter(r => 
+            ['approved', 'completed'].includes(r.status)
+          ).length;
+          refundSummary.approvalRate = Math.round((approvedCount / completedRefunds.length) * 100);
+          
+          // Calculate average processing time in hours
+          const totalProcessingTime = completedRefunds.reduce((sum, r) => {
+            const created = new Date(r.created_at);
+            const reviewed = new Date(r.reviewed_at);
+            return sum + (reviewed - created);
+          }, 0);
+          
+          refundSummary.avgProcessingTime = Math.round(
+            (totalProcessingTime / completedRefunds.length) / (1000 * 60 * 60)
+          );
+        }
+        
+        // Calculate total refund amount for completed refunds
+        const completedRefundAmount = refunds
+          .filter(r => r.status === 'completed')
+          .reduce((sum, r) => sum + (parseFloat(r.refund_amount) || 0), 0);
+        
+        refundSummary.totalRefundAmount = completedRefundAmount;
+        
+        console.log('✅ Refund summary:', refundSummary);
+      }
+    } catch (err) {
+      console.error('Error fetching refund summary:', err.message);
+    }
+
     // Calculate dashboard stats using the correct data
     const stats = {
       totalRevenue: paymentStats.successful_amount || paymentStats.totalRevenue || 0,
@@ -1572,7 +1673,9 @@ const getDashboard = async (req, res, next) => {
       orders: orderStats,
       payments: paymentStats,
       recentOrders,
-      lowStockProducts
+      lowStockProducts,
+      replacementSummary,
+      refundSummary
     });
   } catch (error) {
     console.error('Dashboard error:', error);

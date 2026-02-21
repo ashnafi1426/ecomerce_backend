@@ -25,8 +25,21 @@ class ChatController {
         });
       }
 
+      // Resolve "support" identifier to actual admin/manager user
+      let resolvedParticipantId = participantId;
+      if (participantId === 'support') {
+        const supportUser = await userService.findSupportUser();
+        if (!supportUser) {
+          return res.status(404).json({
+            success: false,
+            message: 'No support user available'
+          });
+        }
+        resolvedParticipantId = supportUser.id;
+      }
+
       // Verify participant exists
-      const participant = await userService.findById(participantId);
+      const participant = await userService.findById(resolvedParticipantId);
       if (!participant) {
         return res.status(404).json({
           success: false,
@@ -49,7 +62,7 @@ class ChatController {
       }
 
       // Get or create conversation
-      const participantIds = [currentUserId, participantId].sort();
+      const participantIds = [currentUserId, resolvedParticipantId].sort();
       const conversation = await chatService.getOrCreateConversation(
         conversationType,
         participantIds,

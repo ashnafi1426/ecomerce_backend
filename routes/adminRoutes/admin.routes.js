@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../../controllers/adminControllers/admin.controller');
 const commissionController = require('../../controllers/commissionControllers/commission.controller');
+const replacementController = require('../../controllers/replacementControllers/replacement.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
@@ -77,6 +78,9 @@ router.get('/logs', authenticate, requireAdmin, adminController.getAuditLogs);
 router.get('/refunds', authenticate, requireAdmin, adminController.getAllRefunds);
 router.post('/refunds/:id/approve', authenticate, requireAdmin, adminController.approveRefund);
 router.post('/refunds/:id/reject', authenticate, requireAdmin, adminController.rejectRefund);
+
+// Replacements
+router.get('/replacements', authenticate, requireAdmin, replacementController.getAllReplacementRequestsAdmin);
 
 // Payment Management
 router.get('/payments', authenticate, requireAdmin, adminController.getAllPayments);

@@ -9,42 +9,16 @@ const { verifyToken } = require('../config/jwt');
 const userService = require('../services/userServices/user.service');
 
 /**
- * Initialize Socket.IO server
- * @param {Object} httpServer - HTTP server instance
- * @returns {Object} Socket.IO server instance
+ * Create authentication middleware for Socket.IO
+ * This middleware verifies JWT tokens, fetches user data, checks account status,
+ * and attaches user information to the socket object.
+ * 
+ * Can be applied to both the main Socket.IO instance and namespaces.
+ * 
+ * @returns {Function} Socket.IO middleware function
  */
-function initializeSocketServer(httpServer) {
-  // Allow multiple frontend origins for development and production
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5173',
-    'https://ecomerce-client-l64h.vercel.app',
-    process.env.FRONTEND_URL
-  ].filter(Boolean); // Remove undefined values
-
-  const io = new Server(httpServer, {
-    cors: {
-      origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          console.warn(`[Socket.IO] Blocked origin: ${origin}`);
-          callback(new Error('Not allowed by CORS'));
-        }
-      },
-      methods: ['GET', 'POST'],
-      credentials: true
-    },
-    pingTimeout: 60000,
-    pingInterval: 25000
-  });
-
-  // Authentication middleware for Socket.IO
-  io.use(async (socket, next) => {
+function createAuthenticationMiddleware() {
+  return async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
 
@@ -95,10 +69,49 @@ function initializeSocketServer(httpServer) {
       authError.data = { type: 'authentication_error', details: error.message };
       next(authError);
     }
+  };
+}
+
+/**
+ * Initialize Socket.IO server
+ * @param {Object} httpServer - HTTP server instance
+ * @returns {Object} Socket.IO server instance
+ */
+function initializeSocketServer(httpServer) {
+  // Allow multiple frontend origins for development and production
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+    'https://ecomerce-client-l64h.vercel.app',
+    process.env.FRONTEND_URL
+  ].filter(Boolean); // Remove undefined values
+
+  const io = new Server(httpServer, {
+    cors: {
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          console.warn(`[Socket.IO] Blocked origin: ${origin}`);
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      methods: ['GET', 'POST'],
+      credentials: true
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000
   });
+
+  // Apply authentication middleware to main instance
+  io.use(createAuthenticationMiddleware());
 
   console.log('[Socket.IO] Server initialized');
   return io;
 }
 
-module.exports = { initializeSocketServer };
+module.exports = { initializeSocketServer, createAuthenticationMiddleware };

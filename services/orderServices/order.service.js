@@ -16,23 +16,99 @@ const discountCalculatorService = require('../discountServices/discountCalculato
 const couponService = require('../couponServices/coupon.service');
 
 /**
+ * Transform sub-order data to match parent order structure
+ * @param {Object} subOrder - Sub-order data from sub_orders table
+ * @returns {Object} Transformed order data
+ */
+const transformSubOrderData = (subOrder) => {
+  // Map sub-order fields to parent order structure
+  return {
+    ...subOrder,
+    // Map fulfillment_status to status for frontend compatibility
+    status: subOrder.fulfillment_status || 'pending',
+    // Map items to basket for consistency
+    basket: subOrder.items || [],
+    // Map total_amount to amount (convert to cents if needed)
+    amount: subOrder.total_amount ? Math.round(subOrder.total_amount * 100) : 0,
+    // Keep original fields for reference
+    fulfillment_status: subOrder.fulfillment_status,
+    items: subOrder.items,
+    total_amount: subOrder.total_amount,
+    // Add source flag for debugging
+    source: 'sub_orders'
+  };
+};
+
+/**
  * Find order by ID
+ * Checks both orders and sub_orders tables
  * @param {String} id - Order UUID
  * @returns {Promise<Object|null>} Order object or null
  */
 const findById = async (id) => {
-  const { data, error } = await supabase
+  // First, try to find in orders table (parent orders)
+  const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .select('*')
     .eq('id', id)
     .single();
   
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
+  if (orderError && orderError.code !== 'PGRST116') {
+    // PGRST116 is "not found" error, which is expected
+    // Any other error should be thrown
+    throw orderError;
   }
   
-  return data;
+  if (orderData) {
+    // Found in orders table - return with source flag
+    return {
+      ...orderData,
+      source: 'orders'
+    };
+  }
+  
+  // Not found in orders table, try sub_orders table
+  const { data: subOrderData, error: subOrderError } = await supabase
+    .from('sub_orders')
+    .select('*')
+    .eq('id', id)
+    .single();
+  
+  if (subOrderError) {
+    if (subOrderError.code === 'PGRST116') {
+      // Not found in either table
+      return null;
+    }
+    throw subOrderError;
+  }
+  
+  if (subOrderData) {
+    // Found in sub_orders table
+    // Fetch parent order data for shipping address and user info
+    const { data: parentOrderData, error: parentError } = await supabase
+      .from('orders')
+      .select('user_id, shipping_address, payment_intent_id')
+      .eq('id', subOrderData.parent_order_id)
+      .single();
+    
+    if (parentError) {
+      console.error('[Order Service] Error fetching parent order:', parentError);
+      // Continue without parent data if fetch fails
+    }
+    
+    // Merge sub-order data with parent order context
+    const mergedData = {
+      ...subOrderData,
+      user_id: parentOrderData?.user_id || null,
+      shipping_address: parentOrderData?.shipping_address || null,
+      payment_intent_id: parentOrderData?.payment_intent_id || null
+    };
+    
+    // Transform sub-order data to match parent order structure
+    return transformSubOrderData(mergedData);
+  }
+  
+  return null;
 };
 
 /**
@@ -82,9 +158,16 @@ const findByUserId = async (userId, filters = {}) => {
       
       return {
         ...item,
-        product: product || {
+        product: product ? {
+          ...product,
+          // Ensure image_url is available for frontend
+          image: product.image_url,
+          name: product.title
+        } : {
           id: item.product_id,
-          name: item.title,
+          title: item.title || 'Product',
+          name: item.title || 'Product',
+          image_url: item.image_url || null,
           image: item.image_url || null,
           price: item.price
         }

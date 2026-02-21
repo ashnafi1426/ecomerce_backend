@@ -146,6 +146,109 @@ class ReplacementController {
   }
 
   /**
+   * Get customer's replacement requests
+   * GET /api/replacements/my-requests
+   * @access Customer
+   * Implements Requirement 1.1
+   */
+  async getMyReplacementRequests(req, res) {
+    try {
+      const customerId = req.user.id;
+      const { status, page = 1, limit = 20 } = req.query;
+
+      const filters = { 
+        status, 
+        page: parseInt(page), 
+        limit: parseInt(limit) 
+      };
+
+      const replacements = await replacementService.getCustomerReplacements(customerId, filters);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          requests: replacements.requests || replacements,
+          total: replacements.total || 0,
+          page: filters.page,
+          limit: filters.limit,
+          totalPages: replacements.totalPages || Math.ceil((replacements.total || 0) / filters.limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error in getMyReplacementRequests controller:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to get replacement requests'
+      });
+    }
+  }
+
+  /**
+   * Get seller's replacement requests
+   * GET /api/replacements/seller-requests
+   * @access Seller
+   * Implements Requirement 2.2
+   */
+  async getSellerReplacementRequests(req, res) {
+    try {
+      const sellerId = req.user.id;
+      const { status, page = 1, limit = 20 } = req.query;
+
+      const filters = { 
+        status, 
+        page: parseInt(page), 
+        limit: parseInt(limit) 
+      };
+
+      const replacements = await replacementService.getSellerReplacements(sellerId, filters);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          requests: replacements.requests || replacements,
+          total: replacements.total || 0,
+          page: filters.page,
+          limit: filters.limit,
+          totalPages: replacements.totalPages || Math.ceil((replacements.total || 0) / filters.limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error in getSellerReplacementRequests controller:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to get seller replacement requests'
+      });
+    }
+  }
+
+  /**
+   * Approve replacement request (Seller)
+   * PATCH /api/replacements/:id/approve
+   * @access Seller
+   * Implements Requirement 2.3
+   */
+  async approveReplacementBySeller(req, res) {
+    try {
+      const { id } = req.params;
+      const sellerId = req.user.id;
+
+      const replacement = await replacementService.processApproval(id, sellerId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Replacement request approved successfully',
+        data: replacement
+      });
+    } catch (error) {
+      console.error('Error in approveReplacementBySeller controller:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to approve replacement request'
+      });
+    }
+  }
+
+  /**
    * Approve replacement request
    * PUT /api/v1/replacements/:id/approve
    * @access Manager
@@ -167,6 +270,41 @@ class ReplacementController {
       res.status(400).json({
         success: false,
         message: error.message || 'Failed to approve replacement request'
+      });
+    }
+  }
+
+  /**
+   * Reject replacement request (Seller)
+   * PATCH /api/replacements/:id/reject
+   * @access Seller
+   * Implements Requirement 2.4
+   */
+  async rejectReplacementBySeller(req, res) {
+    try {
+      const { id } = req.params;
+      const sellerId = req.user.id;
+      const { reason } = req.body;
+
+      if (!reason || reason.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'Rejection reason is required'
+        });
+      }
+
+      const replacement = await replacementService.processRejection(id, sellerId, reason);
+
+      res.status(200).json({
+        success: true,
+        message: 'Replacement request rejected successfully',
+        data: replacement
+      });
+    } catch (error) {
+      console.error('Error in rejectReplacementBySeller controller:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to reject replacement request'
       });
     }
   }
@@ -241,6 +379,60 @@ class ReplacementController {
       res.status(400).json({
         success: false,
         message: error.message || 'Failed to update replacement shipment'
+      });
+    }
+  }
+
+  /**
+   * Get all replacement requests (Admin)
+   * GET /api/replacements/admin/all
+   * @access Admin
+   * Implements Requirements 15.1, 15.3
+   */
+  async getAllReplacementRequestsAdmin(req, res) {
+    try {
+      const { status, seller, startDate, endDate, page = 1, limit = 20 } = req.query;
+
+      const filters = {
+        status,
+        sellerId: seller,
+        startDate,
+        endDate,
+        page: parseInt(page),
+        limit: parseInt(limit)
+      };
+
+      // Get all replacement requests with filtering
+      const replacements = await replacementService.getAllReplacements(filters);
+
+      // Calculate metrics for admin dashboard
+      const metrics = await replacementService.getReplacementAnalytics(filters);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          requests: replacements.requests || replacements,
+          total: replacements.total || 0,
+          page: filters.page,
+          limit: filters.limit,
+          totalPages: replacements.totalPages || Math.ceil((replacements.total || 0) / filters.limit),
+          metrics: {
+            totalRequests: metrics.total_requests || 0,
+            pendingCount: metrics.pending_count || 0,
+            approvedCount: metrics.approved_count || 0,
+            rejectedCount: metrics.rejected_count || 0,
+            completedCount: metrics.completed_count || 0,
+            approvalRate: metrics.approval_rate || '0.0',
+            rejectionRate: metrics.rejection_rate || '0.0',
+            commonReasons: metrics.common_reasons || {}
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error in getAllReplacementRequestsAdmin controller:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to get all replacement requests'
       });
     }
   }

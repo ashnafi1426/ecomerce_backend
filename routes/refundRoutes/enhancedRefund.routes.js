@@ -9,12 +9,27 @@ const { requireRole, requireAnyRole } = require('../../middlewares/role.middlewa
  * Implements Requirements 5.1, 5.2, 5.10, 5.16, 5.20
  */
 
+// Import the basic refund controller for calculate endpoint
+const refundController = require('../../controllers/refundControllers/refund.controller');
+
 // =====================================================
 // PUBLIC ROUTES (Authenticated users)
 // =====================================================
 
 /**
- * @route   POST /api/v1/refunds
+ * @route   POST /api/refunds/calculate
+ * @desc    Calculate refund amount for a product
+ * @access  Customer
+ * @implements Requirement 3.6
+ */
+router.post(
+  '/calculate',
+  authenticate,
+  refundController.calculateRefundAmount
+);
+
+/**
+ * @route   POST /api/refunds
  * @desc    Create refund request
  * @access  Customer
  * @implements Requirement 5.1

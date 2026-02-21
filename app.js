@@ -9,8 +9,6 @@ const dotenv = require('dotenv');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const morgan = require('morgan');
 const compression = require('compression');
 
 // Import centralized router (CommonJS module)
@@ -42,19 +40,6 @@ app.use(helmet({
 
 // Compression - Compress response bodies
 app.use(compression());
-
-// Rate Limiting - Prevent abuse
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 1000 : 100, // Higher limit for development
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: 900 // seconds
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/', limiter);
 
 // CORS Configuration - Allow frontend to access API
 const corsOptions = {
@@ -96,22 +81,6 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 // Body parser - Parse JSON request bodies
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// HTTP request logging - DISABLED for performance
-// Logging creates too much output and slows down the system
-// Only log errors and important events
-const skipMostRequests = (req, res) => {
-  // Only log errors (4xx, 5xx status codes)
-  return res.statusCode < 400;
-};
-
-// Disable HTTP request logging completely for better performance
-// Uncomment below if you need error-only logging
-// if (process.env.NODE_ENV === 'development') {
-//   app.use(morgan('dev', { skip: skipMostRequests }));
-// } else {
-//   app.use(morgan('combined', { skip: skipMostRequests }));
-// }
 
 // ============================================
 // API ROUTES

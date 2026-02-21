@@ -33,6 +33,7 @@ const disputeRouter = require('./disputeRoutes/dispute.routes');
 const variantRouter = require('./variantRoutes/variant.routes');
 
 // Discount and Promotion System
+const discountRouter = require('./discountRoutes/discount.routes');
 const couponRouter = require('./couponRoutes/coupon.routes');
 const promotionRouter = require('./promotionRoutes/promotion.routes');
 
@@ -94,7 +95,7 @@ const badgeRouter = require('./badgeRoutes/badge.routes');
 router.use('/api/auth', authRouter); // Mount auth routes with prefix
 router.use(userRouter);
 router.use(productRouter);
-router.use(orderRouter);
+router.use('/api', orderRouter); // Mount order routes with /api prefix
 router.use('/api/admin', adminRouter); // Mount admin routes with prefix
 router.use('/api/categories', categoryRouter); // Mount category routes with prefix
 router.use(returnRouter);
@@ -106,7 +107,7 @@ router.use('/api/reviews', reviewRouter);
 router.use(analyticsRouter);
 router.use('/api', commissionRouter);
 router.use(sellerBalanceRouter);
-router.use(subOrderRouter);
+router.use('/api', subOrderRouter); // Mount sub-order routes with /api prefix
 
 // Phase 5: Multi-vendor feature routes
 router.use(sellerRouter);
@@ -118,6 +119,7 @@ router.use(disputeRouter);
 router.use('/api/variants', variantRouter);
 
 // Discount and Promotion System
+router.use('/api/discounts', discountRouter);
 router.use('/api/coupons', couponRouter);
 router.use('/api/promotions', promotionRouter);
 

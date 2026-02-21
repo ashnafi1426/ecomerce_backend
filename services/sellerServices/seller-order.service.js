@@ -280,7 +280,7 @@ async function notifyCustomerOfStatusChange(subOrderId, newStatus) {
       .select(`
         id,
         parent_order_id,
-        product_name,
+        items,
         tracking_number,
         carrier,
         orders!sub_orders_parent_order_id_fkey (
@@ -298,6 +298,9 @@ async function notifyCustomerOfStatusChange(subOrderId, newStatus) {
       console.error('[Seller Order Service] Error fetching order for notification:', error);
       return;
     }
+    
+    // Extract product name from items array
+    const productName = order.items?.[0]?.product_name || 'Product';
     
     // Define notification content based on status
     const notificationConfig = {
@@ -347,7 +350,7 @@ async function notifyCustomerOfStatusChange(subOrderId, newStatus) {
     // Create notification
     await notificationService.createNotification({
       user_id: order.orders.user_id,
-      type: 'order_status_update',
+      type: 'order_placed', // Using existing type for order-related notifications
       title: config.title,
       message: config.message,
       priority: config.priority,
@@ -355,7 +358,7 @@ async function notifyCustomerOfStatusChange(subOrderId, newStatus) {
         order_id: order.parent_order_id,
         sub_order_id: subOrderId,
         new_status: newStatus,
-        product_name: order.product_name,
+        product_name: productName,
         tracking_number: order.tracking_number,
         carrier: order.carrier
       },

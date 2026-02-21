@@ -86,22 +86,36 @@ const getOrderById = async (req, res, next) => {
       });
     }
 
-    // Transform basket to items array for frontend compatibility
+    // Transform basket/items to items array for frontend compatibility
     let items = [];
-    if (Array.isArray(order.basket)) {
-      items = order.basket.map(item => ({
+    
+    // Handle both parent orders (basket) and sub-orders (items)
+    const sourceData = order.source === 'sub_orders' ? order.items : order.basket;
+    
+    if (Array.isArray(sourceData)) {
+      items = sourceData.map(item => ({
         id: item.product_id,
         product_id: item.product_id,
         quantity: item.quantity,
         price: item.price,
         product: {
           id: item.product_id,
-          name: item.title,
-          title: item.title,
+          name: item.title || item.name,
+          title: item.title || item.name,
           image_url: item.image_url,
           emoji: '📦'
         }
       }));
+    }
+
+    // Calculate total based on source
+    let total;
+    if (order.source === 'sub_orders') {
+      // Sub-orders store total_amount in dollars
+      total = order.total_amount || 0;
+    } else {
+      // Parent orders store amount in cents
+      total = order.amount / 100;
     }
 
     // Return order with consistent structure
@@ -110,7 +124,7 @@ const getOrderById = async (req, res, next) => {
       data: {
         ...order,
         items: items,
-        total: order.amount / 100, // Convert cents to dollars
+        total: total,
         shippingAddress: order.shipping_address
       }
     });
