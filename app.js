@@ -1,16 +1,9 @@
-/**
- * EXPRESS APP CONFIGURATION
- * 
- * Production-ready Express application with security middleware,
- * rate limiting, and centralized error handling.
- */
-
 require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+// const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const compression = require('compression');
 
@@ -45,48 +38,23 @@ app.use(helmet({
 // Compression - Compress response bodies
 app.use(compression());
 
-// Rate Limiting - Prevent abuse
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 1000 : 100, // Higher limit for development
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: 900 // seconds
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/', limiter);
-
-// ============================================
-// CORS CONFIGURATION
-// ============================================
-// Configure CORS for production deployment
+// CORS Configuration - Allow specific origins for production and development
 const allowedOrigins = [
-  'https://ecomerce-woas.vercel.app/',
+  'http://localhost:3000',
+  'http://localhost:3001', 
+  'http://localhost:5173', // Vite dev server default
+  'https://ecomerce-woas.vercel.app',
   process.env.FRONTEND_URL
 ].filter(Boolean); // Remove undefined values
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, curl)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`[CORS] Blocked origin: ${origin}`);
-      callback(null, true); // Allow all origins in production for now
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400 // 24 hours
-};
+console.log('🌐 CORS allowed origins:', allowedOrigins);
 
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept']
+}));
 
 // ============================================
 // BODY PARSING & LOGGING
@@ -107,70 +75,38 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// ============================================
-// API ROUTES
-// ============================================
+// Use centralized router for all API routes
+app.use(router);
 
-// Root route - For Render health checks
+// Root route handler
 app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'FastShop E-Commerce API',
-    data: {
-      version: '1.0.0',
-      environment: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString(),
-      endpoints: {
-        health: '/api/v1/health',
-        api: '/api/v1'
-      }
-    }
+  res.json({
+    message: 'E-commerce Backend API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/v1/health',
+      auth: '/api/auth',
+      products: '/api/products',
+      orders: '/api/orders',
+      users: '/api/users',
+      cart: '/api/cart',
+      payments: '/api/payments',
+      chat: '/api/chat'
+    },
+    documentation: 'API documentation available at /api/docs'
   });
 });
 
-// Health check endpoint - API v1
+// Health check endpoint
 app.get('/api/v1/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'success',
-    message: 'Server is running',
-    data: {
-      environment: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      version: '1.0.0'
-    }
-  });
-});
-
-// Legacy health check (backward compatibility)
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development'
   });
 });
-
-// API v1 info endpoint
-app.get('/api/v1', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'E-Commerce API v1',
-    data: {
-      version: '1.0.0',
-      endpoints: {
-        health: '/api/v1/health',
-        auth: '/api/auth',
-        products: '/api/products',
-        orders: '/api/orders',
-        admin: '/api/admin'
-      }
-    }
-  });
-});
-
-// Use centralized router for all API routes
-app.use(router);
 
 // 404 handler - Route not found
 app.use((req, res, next) => {

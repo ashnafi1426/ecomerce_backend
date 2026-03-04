@@ -16,41 +16,41 @@ const { requireSeller, requireManager, requireMinRole } = require('../../middlew
 // ============================================
 
 // Browse products (only approved products visible)
-router.get('/api/products', optionalAuthenticate, productController.getAllProducts);
+router.get('/products', optionalAuthenticate, productController.getAllProducts);
 
 // Search products (role-based visibility with optional auth)
-router.get('/api/products/search', optionalAuthenticate, productController.searchProducts);
+router.get('/products/search', optionalAuthenticate, productController.searchProducts);
 
 // Get product details (only approved products visible)
-router.get('/api/products/:id', optionalAuthenticate, productController.getProductById);
+router.get('/products/:id', optionalAuthenticate, productController.getProductById);
 
 // ============================================
 // SELLER ROUTES (Seller authentication required)
 // ============================================
 
 // Get seller's own products
-router.get('/api/seller/products', authenticate, requireSeller, productController.getSellerProducts);
+router.get('/seller/products', authenticate, requireSeller, productController.getSellerProducts);
 
 // Create new product (pending approval)
-router.post('/api/seller/products', authenticate, requireSeller, productController.createProduct);
+router.post('/seller/products', authenticate, requireSeller, productController.createProduct);
 
 // Update own product (triggers re-approval if approved)
-router.put('/api/seller/products/:id', authenticate, requireSeller, productController.updateProduct);
+router.put('/seller/products/:id', authenticate, requireSeller, productController.updateProduct);
 
 // Delete own product
-router.delete('/api/seller/products/:id', authenticate, requireSeller, productController.deleteProduct);
+router.delete('/seller/products/:id', authenticate, requireSeller, productController.deleteProduct);
 
 // ============================================
 // MANAGER ROUTES (Manager/Admin authentication required)
 // ============================================
 
 // Get product approval queue (pending products)
-router.get('/api/manager/products/pending', authenticate, requireMinRole('manager'), productController.getApprovalQueue);
+router.get('/manager/products/pending', authenticate, requireMinRole('manager'), productController.getApprovalQueue);
 
 // Approve product
-router.post('/api/manager/products/:id/approve', authenticate, requireMinRole('manager'), productController.approveProduct);
+router.post('/manager/products/:id/approve', authenticate, requireMinRole('manager'), productController.approveProduct);
 
 // Reject product
-router.post('/api/manager/products/:id/reject', authenticate, requireMinRole('manager'), productController.rejectProduct);
+router.post('/manager/products/:id/reject', authenticate, requireMinRole('manager'), productController.rejectProduct);
 
 module.exports = router;

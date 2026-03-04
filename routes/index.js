@@ -3,153 +3,196 @@
  * This follows the organized folder structure pattern.
  */
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 
-// Import routes from organized folders
-const authRouter = require('./authRoutes/auth.routes');
-const userRouter = require('./userRoutes/user.routes');
-const productRouter = require('./productRoutes/product.routes');
-const orderRouter = require('./orderRoutes/order.routes');
-const adminRouter = require('./adminRoutes/admin.routes');
-const categoryRouter = require('./categoryRoutes/category.routes');
-const returnRouter = require('./returnRoutes/return.routes');
-const addressRouter = require('./addressRoutes/address.routes');
-const auditLogRouter = require('./auditLogRoutes/auditLog.routes');
-const cartRouter = require('./cartRoutes/cart.routes');
-const paymentRouter = require('./paymentRoutes/payment.routes');
-const reviewRouter = require('./reviewRoutes/review.routes');
-const analyticsRouter = require('./analyticsRoutes/analytics.routes');
-const commissionRouter = require('./commissionRoutes/commission.routes');
-const sellerBalanceRouter = require('./sellerBalanceRoutes/sellerBalance.routes');
-const subOrderRouter = require('./subOrderRoutes/subOrder.routes');
+// Safe route loading function
+function safeRequire(routePath, routeName) {
+  try {
+    const fullPath = path.join(__dirname, routePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      console.warn(`⚠️  Route file not found: ${routePath} (${routeName})`);
+      return null;
+    }
+    
+    const routeModule = require(routePath);
+    
+    // Validate that it's a proper router/middleware
+    if (!routeModule || (typeof routeModule !== 'function' && typeof routeModule !== 'object')) {
+      console.warn(`⚠️  Invalid route module: ${routePath} (${routeName}) - not a function or object`);
+      return null;
+    }
+    
+    console.log(`✅ Loaded route: ${routeName}`);
+    return routeModule;
+  } catch (error) {
+    console.warn(`⚠️  Failed to load route: ${routePath} (${routeName}) - ${error.message}`);
+    return null;
+  }
+}
+
+// Import routes from organized folders with safe loading
+const authRouter = safeRequire('./authRoutes/auth.routes.js', 'Auth Routes');
+const userRouter = safeRequire('./userRoutes/user.routes.js', 'User Routes');
+const productRouter = safeRequire('./productRoutes/product.routes.js', 'Product Routes');
+const orderRouter = safeRequire('./orderRoutes/order.routes.js', 'Order Routes');
+const adminRouter = safeRequire('./adminRoutes/admin.routes.js', 'Admin Routes');
+const categoryRouter = safeRequire('./categoryRoutes/category.routes.js', 'Category Routes');
+const returnRouter = safeRequire('./returnRoutes/return.routes.js', 'Return Routes');
+const addressRouter = safeRequire('./addressRoutes/address.routes.js', 'Address Routes');
+const auditLogRouter = safeRequire('./auditLogRoutes/auditLog.routes.js', 'Audit Log Routes');
+const cartRouter = safeRequire('./cartRoutes/cart.routes.js', 'Cart Routes');
+const paymentRouter = safeRequire('./paymentRoutes/payment.routes.js', 'Payment Routes');
+const reviewRouter = safeRequire('./reviewRoutes/review.routes.js', 'Review Routes');
+const analyticsRouter = safeRequire('./analyticsRoutes/analytics.routes.js', 'Analytics Routes');
+const commissionRouter = safeRequire('./commissionRoutes/commission.routes.js', 'Commission Routes');
+const sellerBalanceRouter = safeRequire('./sellerBalanceRoutes/sellerBalance.routes.js', 'Seller Balance Routes');
+const subOrderRouter = safeRequire('./subOrderRoutes/subOrder.routes.js', 'Sub Order Routes');
 
 // Phase 5: Multi-vendor feature routes
-const sellerRouter = require('./sellerRoutes/seller.routes');
-const managerRouter = require('./managerRoutes/manager.routes');
-const notificationRouter = require('./notificationRoutes/notification.routes');
-const disputeRouter = require('./disputeRoutes/dispute.routes');
+const sellerRouter = safeRequire('./sellerRoutes/seller.routes.js', 'Seller Routes');
+const managerRouter = safeRequire('./managerRoutes/manager.routes.js', 'Manager Routes');
+const notificationRouter = safeRequire('./notificationRoutes/notification.routes.js', 'Notification Routes');
+const disputeRouter = safeRequire('./disputeRoutes/dispute.routes.js', 'Dispute Routes');
 
 // Phase 6: Product Variants System
-const variantRouter = require('./variantRoutes/variant.routes');
+const variantRouter = safeRequire('./variantRoutes/variant.routes.js', 'Variant Routes');
 
 // Discount and Promotion System
-const couponRouter = require('./couponRoutes/coupon.routes');
-const promotionRouter = require('./promotionRoutes/promotion.routes');
+const couponRouter = safeRequire('./couponRoutes/coupon.routes.js', 'Coupon Routes');
+const promotionRouter = safeRequire('./promotionRoutes/promotion.routes.js', 'Promotion Routes');
 
 // Delivery Rating System
-const deliveryRatingRouter = require('./deliveryRatingRoutes/deliveryRating.routes');
+const deliveryRatingRouter = safeRequire('./deliveryRatingRoutes/deliveryRating.routes.js', 'Delivery Rating Routes');
 
 // Replacement Process System
-const replacementRouter = require('./replacementRoutes/replacement.routes');
+const replacementRouter = safeRequire('./replacementRoutes/replacement.routes.js', 'Replacement Routes');
 
 // Enhanced Refund Process System
-const refundRouter = require('./refundRoutes/enhancedRefund.routes');
+const refundRouter = safeRequire('./refundRoutes/enhancedRefund.routes.js', 'Enhanced Refund Routes');
 
 // Guest Checkout System (Amazon-style)
-const guestRouter = require('./guestRoutes/guest.routes');
+const guestRouter = safeRequire('./guestRoutes/guest.routes.js', 'Guest Routes');
 
 // Enhanced Inventory Management System (Amazon-style)
-const inventoryEnhancedRouter = require('./inventoryRoutes/inventory.routes');
+const inventoryEnhancedRouter = safeRequire('./inventoryRoutes/inventory.routes.js', 'Inventory Routes');
 
 // Amazon-style Product Approval Workflow
-const approvalRouter = require('./approvalRoutes/approval.routes');
+const approvalRouter = safeRequire('./approvalRoutes/approval.routes.js', 'Approval Routes');
 
 // Phase 2: Seller Payment System
-const sellerPaymentRouter = require('./paymentRoutes/seller-payment.routes');
+const sellerPaymentRouter = safeRequire('./paymentRoutes/seller-payment.routes.js', 'Seller Payment Routes');
 
 // Stripe Payment System
-const stripePaymentRouter = require('./paymentRoutes/stripe-payment.routes');
+const stripePaymentRouter = safeRequire('./paymentRoutes/stripe-payment.routes.js', 'Stripe Payment Routes');
 
 // Wishlist System
-const wishlistRouter = require('./wishlistRoutes/wishlist.routes');
+const wishlistRouter = safeRequire('./wishlistRoutes/wishlist.routes.js', 'Wishlist Routes');
 
 // Live Chat System
-const chatRouter = require('./chatRoutes/chat.routes');
+const chatRouter = safeRequire('./chatRoutes/chat.routes.js', 'Chat Routes');
 
 // Deals System
-const dealRouter = require('./dealRoutes/deal.routes');
+const dealRouter = safeRequire('./dealRoutes/deal.routes.js', 'Deal Routes');
 
 // Recommendations System
-const recommendationRouter = require('./recommendationRoutes/recommendation.routes');
+const recommendationRouter = safeRequire('./recommendationRoutes/recommendation.routes.js', 'Recommendation Routes');
 
 // Browsing History System
-const browsingHistoryRouter = require('./browsingHistoryRoutes/browsing-history.routes');
+const browsingHistoryRouter = safeRequire('./browsingHistoryRoutes/browsing-history.routes.js', 'Browsing History Routes');
 
 // Support System
-const supportRouter = require('./supportRoutes/support.routes');
+const supportRouter = safeRequire('./supportRoutes/support.routes.js', 'Support Routes');
 
-// Add routes to the main router
-router.use('/api/auth', authRouter); // Mount auth routes with prefix
-router.use(userRouter);
-router.use(productRouter);
-router.use(orderRouter);
-router.use('/api/admin', adminRouter); // Mount admin routes with prefix
-router.use('/api/categories', categoryRouter); // Mount category routes with prefix
-router.use(returnRouter);
-router.use(addressRouter);
-router.use(auditLogRouter);
-router.use('/api/cart', cartRouter);
-router.use('/api/payments', paymentRouter);
-router.use('/api/reviews', reviewRouter);
-router.use(analyticsRouter);
-router.use('/api', commissionRouter);
-router.use(sellerBalanceRouter);
-router.use(subOrderRouter);
+// Safe route mounting function
+function safeMount(router, path, routeModule, routeName) {
+  if (routeModule) {
+    try {
+      router.use(path, routeModule);
+      console.log(`✅ Mounted route: ${routeName} at ${path || '/'}`);
+    } catch (error) {
+      console.warn(`⚠️  Failed to mount route: ${routeName} at ${path || '/'} - ${error.message}`);
+    }
+  } else {
+    console.log(`⏭️  Skipped route: ${routeName} (not available)`);
+  }
+}
+
+// Add routes to the main router with safe mounting
+safeMount(router, '/api/auth', authRouter, 'Auth Routes');
+safeMount(router, '', userRouter, 'User Routes');
+safeMount(router, '/api', productRouter, 'Product Routes');
+safeMount(router, '', orderRouter, 'Order Routes');
+safeMount(router, '/api/admin', adminRouter, 'Admin Routes');
+safeMount(router, '/api/categories', categoryRouter, 'Category Routes');
+safeMount(router, '', returnRouter, 'Return Routes');
+safeMount(router, '', addressRouter, 'Address Routes');
+safeMount(router, '', auditLogRouter, 'Audit Log Routes');
+safeMount(router, '/api/cart', cartRouter, 'Cart Routes');
+safeMount(router, '/api/payments', paymentRouter, 'Payment Routes');
+safeMount(router, '/api/reviews', reviewRouter, 'Review Routes');
+safeMount(router, '', analyticsRouter, 'Analytics Routes');
+safeMount(router, '/api', commissionRouter, 'Commission Routes');
+safeMount(router, '', sellerBalanceRouter, 'Seller Balance Routes');
+safeMount(router, '', subOrderRouter, 'Sub Order Routes');
 
 // Phase 5: Multi-vendor feature routes
-router.use(sellerRouter);
-router.use(managerRouter);
-router.use('/api/notifications', notificationRouter);
-router.use(disputeRouter);
+safeMount(router, '', sellerRouter, 'Seller Routes');
+safeMount(router, '', managerRouter, 'Manager Routes');
+safeMount(router, '/api/notifications', notificationRouter, 'Notification Routes');
+safeMount(router, '', disputeRouter, 'Dispute Routes');
 
 // Phase 6: Product Variants System
-router.use('/api/variants', variantRouter);
+safeMount(router, '/api/variants', variantRouter, 'Variant Routes');
 
 // Discount and Promotion System
-router.use('/api/coupons', couponRouter);
-router.use('/api/promotions', promotionRouter);
+safeMount(router, '/api/coupons', couponRouter, 'Coupon Routes');
+safeMount(router, '/api/promotions', promotionRouter, 'Promotion Routes');
 
 // Delivery Rating System
-router.use('/api/delivery-ratings', deliveryRatingRouter);
+safeMount(router, '/api/delivery-ratings', deliveryRatingRouter, 'Delivery Rating Routes');
 
 // Replacement Process System
-router.use('/api/replacements', replacementRouter);
+safeMount(router, '/api/replacements', replacementRouter, 'Replacement Routes');
 
 // Enhanced Refund Process System
-router.use('/api/refunds', refundRouter);
+safeMount(router, '/api/refunds', refundRouter, 'Enhanced Refund Routes');
 
 // Guest Checkout System (Amazon-style)
-router.use('/api/guest', guestRouter);
+safeMount(router, '/api/guest', guestRouter, 'Guest Routes');
 
 // Enhanced Inventory Management System (Amazon-style)
-router.use('/api/inventory', inventoryEnhancedRouter);
+safeMount(router, '/api/inventory', inventoryEnhancedRouter, 'Inventory Routes');
 
 // Amazon-style Product Approval Workflow
-router.use('/api/approvals', approvalRouter);
+safeMount(router, '/api/approvals', approvalRouter, 'Approval Routes');
 
 // Phase 2: Seller Payment System
-router.use('/api/seller', sellerPaymentRouter);
+safeMount(router, '/api/seller', sellerPaymentRouter, 'Seller Payment Routes');
 
 // Stripe Payment System
-router.use('/api/stripe', stripePaymentRouter);
+safeMount(router, '/api/stripe', stripePaymentRouter, 'Stripe Payment Routes');
 
 // Wishlist System
-router.use('/api/wishlist', wishlistRouter);
+safeMount(router, '/api/wishlist', wishlistRouter, 'Wishlist Routes');
 
 // Live Chat System
-router.use('/api/chat', chatRouter);
+safeMount(router, '/api/chat', chatRouter, 'Chat Routes');
 
 // Deals System
-router.use('/api/deals', dealRouter);
+safeMount(router, '/api/deals', dealRouter, 'Deal Routes');
 
 // Recommendations System
-router.use('/api/recommendations', recommendationRouter);
+safeMount(router, '/api/recommendations', recommendationRouter, 'Recommendation Routes');
 
 // Browsing History System
-router.use('/api/browsing-history', browsingHistoryRouter);
+safeMount(router, '/api/browsing-history', browsingHistoryRouter, 'Browsing History Routes');
 
 // Support System
-router.use('/api/support', supportRouter);
+safeMount(router, '/api/support', supportRouter, 'Support Routes');
 
 // Export the router
 module.exports = router;

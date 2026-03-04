@@ -1,8 +1,3 @@
-/**
- * CHAT ROUTES
- * 
- * REST API routes for chat operations
- */
 
 const express = require('express');
 const router = express.Router();
@@ -37,6 +32,11 @@ const upload = multer({
       cb(new Error('Invalid file type. Only images and documents are allowed.'));
     }
   }
+});
+
+// Test endpoint (for debugging) - NO AUTH REQUIRED
+router.get('/test', (req, res) => {
+  res.json({ message: 'Chat routes are working', timestamp: new Date().toISOString() });
 });
 
 // All chat routes require authentication

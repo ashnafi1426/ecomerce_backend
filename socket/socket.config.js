@@ -18,7 +18,9 @@ function initializeSocketServer(httpServer) {
   const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
-    'http://localhost:5173',
+    'http://localhost:4173', // Vite preview mode
+    'http://localhost:5173', // Vite dev server
+    'https://ecomerce-woas.vercel.app', // Updated Vercel URL
     'https://ecomerce-client-l64h.vercel.app',
     process.env.FRONTEND_URL
   ].filter(Boolean); // Remove undefined values
@@ -48,8 +50,6 @@ function initializeSocketServer(httpServer) {
     try {
       const token = socket.handshake.auth.token;
 
-      console.log('[Socket.IO] Auth attempt - Token present:', !!token);
-
       if (!token) {
         const error = new Error('No token provided');
         error.data = { type: 'authentication_error' };
@@ -60,26 +60,30 @@ function initializeSocketServer(httpServer) {
       let decoded;
       try {
         decoded = verifyToken(token);
-        console.log('[Socket.IO] Token verified for user:', decoded.userId);
       } catch (jwtError) {
-        console.error('[Socket.IO] JWT verification failed:', jwtError.message);
         const error = new Error('Invalid or expired token');
         error.data = { type: 'authentication_error', reason: jwtError.message };
         return next(error);
       }
 
-      // Get user from database
-      const user = await userService.findById(decoded.userId);
+      // Get user from database with error handling
+      let user;
+      try {
+        user = await userService.findById(decoded.userId);
+      } catch (dbError) {
+        console.error('[Socket.IO] Database error during user lookup:', dbError.message);
+        const error = new Error('Database connection error');
+        error.data = { type: 'server_error', details: 'Unable to verify user' };
+        return next(error);
+      }
 
       if (!user) {
-        console.error('[Socket.IO] User not found:', decoded.userId);
         const error = new Error('User not found');
         error.data = { type: 'authentication_error' };
         return next(error);
       }
 
       if (user.status !== 'active') {
-        console.error('[Socket.IO] User account not active:', user.id);
         const error = new Error('Account not active');
         error.data = { type: 'authentication_error' };
         return next(error);
@@ -91,10 +95,9 @@ function initializeSocketServer(httpServer) {
       socket.userEmail = user.email;
       socket.displayName = user.display_name;
 
-      console.log('[Socket.IO] Authentication successful:', user.email, user.role);
       next();
     } catch (error) {
-      console.error('[Socket.IO] Unexpected authentication error:', error);
+      console.error('[Socket.IO] Unexpected authentication error:', error.message);
       const authError = new Error('Authentication failed');
       authError.data = { type: 'authentication_error', details: error.message };
       next(authError);
