@@ -1,12 +1,19 @@
 /**
  * JWT CONFIGURATION
- * 
+ *
  * Configuration for JSON Web Token generation and verification.
  */
 
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+// SECURITY: JWT_SECRET must be set via environment variable. No fallback.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set.');
+  console.error('Please set JWT_SECRET in your .env file or environment.');
+  process.exit(1);
+}
+
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 /**

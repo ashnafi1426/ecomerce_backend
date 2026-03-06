@@ -23,11 +23,11 @@ router.get('/check/:productId', checkAvailability);
  * Authenticated Routes (Customer)
  */
 
-// Reserve inventory during checkout
-router.post('/reserve', optionalAuthenticate, reserveInventory);
+// Reserve inventory during checkout (requires authentication)
+router.post('/reserve', authenticate, reserveInventory);
 
-// Release reservation
-router.post('/release/:reservationId', optionalAuthenticate, releaseReservation);
+// Release reservation (requires authentication)
+router.post('/release/:reservationId', authenticate, releaseReservation);
 
 /**
  * Admin/Manager Routes

@@ -73,26 +73,29 @@ const ROLE_HIERARCHY = {
 };
 
 /**
- * Require specific role
- * @param {String} role - Required role ('admin', 'manager', 'seller', or 'customer')
+ * Require specific role(s)
+ * @param {String|Array<String>} role - Required role or array of roles
  * @returns {Function} Express middleware
  */
 const requireRole = (role) => {
   return (req, res, next) => {
     // Check if user is authenticated (should be set by authenticate middleware)
     if (!req.user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Unauthorized',
-        message: 'Authentication required' 
+        message: 'Authentication required'
       });
     }
 
-    // Check if user has required role
-    if (req.user.role !== role) {
-      return res.status(403).json({ 
+    // Support both single role string and array of roles
+    const allowedRoles = Array.isArray(role) ? role : [role];
+
+    // Check if user has one of the required roles
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
         error: 'Forbidden',
-        message: `Access denied. ${role} role required.`,
-        requiredRole: role,
+        message: `Access denied. Required role(s): ${allowedRoles.join(', ')}`,
+        requiredRole: allowedRoles,
         userRole: req.user.role
       });
     }

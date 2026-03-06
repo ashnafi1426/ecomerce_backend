@@ -7,17 +7,42 @@ const { requireRole, requireAnyRole } = require('../../middlewares/role.middlewa
 /**
  * Enhanced Refund Routes
  * Implements Requirements 5.1, 5.2, 5.10, 5.16, 5.20
+ *
+ * IMPORTANT: Static routes MUST come before parameterized routes
  */
 
 // =====================================================
-// PUBLIC ROUTES (Authenticated users)
+// STATIC ROUTES (must come BEFORE /:id)
 // =====================================================
 
 /**
- * @route   POST /api/v1/refunds
+ * @route   GET /api/refunds/analytics
+ * @desc    Get refund analytics
+ * @access  Manager, Admin
+ */
+router.get(
+  '/analytics',
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
+  enhancedRefundController.getRefundAnalytics
+);
+
+/**
+ * @route   POST /api/refunds/goodwill
+ * @desc    Issue goodwill refund
+ * @access  Manager, Admin
+ */
+router.post(
+  '/goodwill',
+  authenticate,
+  requireAnyRole(['manager', 'admin']),
+  enhancedRefundController.issueGoodwillRefund
+);
+
+/**
+ * @route   POST /api/refunds
  * @desc    Create refund request
  * @access  Customer
- * @implements Requirement 5.1
  */
 router.post(
   '/',
@@ -27,7 +52,22 @@ router.post(
 );
 
 /**
- * @route   GET /api/v1/refunds/:id
+ * @route   GET /api/refunds
+ * @desc    Get all refunds (filtered by role)
+ * @access  Customer (own), Seller (own), Manager (all), Admin (all)
+ */
+router.get(
+  '/',
+  authenticate,
+  enhancedRefundController.getAllRefunds
+);
+
+// =====================================================
+// PARAMETERIZED ROUTES (must come AFTER static routes)
+// =====================================================
+
+/**
+ * @route   GET /api/refunds/:id
  * @desc    Get refund request by ID
  * @access  Customer (own), Seller (own), Manager, Admin
  */
@@ -38,26 +78,9 @@ router.get(
 );
 
 /**
- * @route   GET /api/v1/refunds
- * @desc    Get all refunds (filtered by role)
- * @access  Customer (own), Seller (own), Manager (all), Admin (all)
- * @implements Requirement 5.20
- */
-router.get(
-  '/',
-  authenticate,
-  enhancedRefundController.getAllRefunds
-);
-
-// =====================================================
-// MANAGER ROUTES
-// =====================================================
-
-/**
- * @route   POST /api/v1/refunds/:id/process-partial
+ * @route   POST /api/refunds/:id/process-partial
  * @desc    Process partial refund
  * @access  Manager, Admin
- * @implements Requirement 5.2
  */
 router.post(
   '/:id/process-partial',
@@ -67,10 +90,9 @@ router.post(
 );
 
 /**
- * @route   POST /api/v1/refunds/:id/process-full
+ * @route   POST /api/refunds/:id/process-full
  * @desc    Process full refund
  * @access  Manager, Admin
- * @implements Requirement 5.2
  */
 router.post(
   '/:id/process-full',
@@ -80,7 +102,7 @@ router.post(
 );
 
 /**
- * @route   POST /api/v1/refunds/:id/reject
+ * @route   POST /api/refunds/:id/reject
  * @desc    Reject refund request
  * @access  Manager, Admin
  */
@@ -89,32 +111,6 @@ router.post(
   authenticate,
   requireAnyRole(['manager', 'admin']),
   enhancedRefundController.rejectRefund
-);
-
-/**
- * @route   GET /api/v1/refunds/analytics
- * @desc    Get refund analytics
- * @access  Manager, Admin
- * @implements Requirement 5.10
- */
-router.get(
-  '/analytics',
-  authenticate,
-  requireAnyRole(['manager', 'admin']),
-  enhancedRefundController.getRefundAnalytics
-);
-
-/**
- * @route   POST /api/v1/refunds/goodwill
- * @desc    Issue goodwill refund
- * @access  Manager, Admin
- * @implements Requirement 5.16
- */
-router.post(
-  '/goodwill',
-  authenticate,
-  requireAnyRole(['manager', 'admin']),
-  enhancedRefundController.issueGoodwillRefund
 );
 
 module.exports = router;

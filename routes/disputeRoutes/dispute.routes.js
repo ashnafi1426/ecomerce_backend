@@ -1,7 +1,9 @@
 /**
  * DISPUTE ROUTES
- * 
+ *
  * Routes for dispute operations.
+ *
+ * IMPORTANT: Static routes MUST come before parameterized routes
  */
 
 const express = require('express');
@@ -10,13 +12,27 @@ const disputeController = require('../../controllers/disputeControllers/dispute.
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/role.middleware');
 
-// Customer/Seller dispute routes
-router.post('/api/disputes', authenticate, disputeController.createDispute);
-router.get('/api/disputes', authenticate, disputeController.getUserDisputes);
-router.get('/api/disputes/:disputeId', authenticate, disputeController.getDisputeById);
-router.post('/api/disputes/:disputeId/comment', authenticate, disputeController.addComment);
+// ============================================
+// STATIC ROUTES (must come BEFORE /:disputeId)
+// ============================================
 
-// Admin routes
+// Get dispute statistics (admin)
 router.get('/api/disputes/stats', authenticate, requireAdmin, disputeController.getStatistics);
+
+// Create dispute
+router.post('/api/disputes', authenticate, disputeController.createDispute);
+
+// Get user's disputes
+router.get('/api/disputes', authenticate, disputeController.getUserDisputes);
+
+// ============================================
+// PARAMETERIZED ROUTES (must come AFTER static routes)
+// ============================================
+
+// Get dispute by ID
+router.get('/api/disputes/:disputeId', authenticate, disputeController.getDisputeById);
+
+// Add comment to dispute
+router.post('/api/disputes/:disputeId/comment', authenticate, disputeController.addComment);
 
 module.exports = router;

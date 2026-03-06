@@ -38,7 +38,7 @@ router.post('/api/audit-logs/search', authenticate, requireAdmin, auditLogContro
 // Create audit log entry (internal use)
 router.post('/api/audit-logs', authenticate, requireAdmin, auditLogController.createLog);
 
-// Cleanup old logs
-router.delete('/api/audit-logs/cleanup', authenticate, requireAdmin, auditLogController.cleanupLogs);
+// Cleanup old logs - REMOVED for compliance (audit logs should not be deletable)
+// router.delete('/api/audit-logs/cleanup', authenticate, requireAdmin, auditLogController.cleanupLogs);
 
 module.exports = router;

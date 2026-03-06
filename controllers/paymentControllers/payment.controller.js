@@ -1,12 +1,12 @@
-import { stripe, stripeConfig } from '../../config/stripe.js';
-import supabase from '../../config/supabase.js';
-import { splitOrderBySeller, notifySellers } from '../../services/orderServices/order-splitting-with-email.service.js';
-import notificationService from '../../services/notificationServices/notification.service.js';
+const { stripe, stripeConfig } = require('../../config/stripe.js');
+const supabase = require('../../config/supabase.js');
+const { splitOrderBySeller, notifySellers } = require('../../services/orderServices/order-splitting-with-email.service.js');
+const notificationService = require('../../services/notificationServices/notification.service.js');
 
 /**
  * FASTSHOP PAYMENT CONTROLLER - COMPLETE IMPLEMENTATION
  * ====================================================
- * 
+ *
  * Handles the complete payment flow:
  * 1. Payment Intent Creation (with backend price validation)
  * 2. Order Creation after payment success
@@ -19,11 +19,11 @@ import notificationService from '../../services/notificationServices/notificatio
 /**
  * Create Payment Intent
  * POST /api/payments/create-intent
- * 
+ *
  * Security: Recalculates all prices on backend
  * Never trusts frontend pricing
  */
-export const createPaymentIntent = async (req, res) => {
+const createPaymentIntent = async (req, res) => {
   try {
     const userId = req.user?.id; // Can be null for guest checkout
     const { cartItems, shippingAddress, billingAddress } = req.body;
@@ -36,36 +36,36 @@ export const createPaymentIntent = async (req, res) => {
     // Validate each cart item has required fields
     for (let i = 0; i < cartItems.length; i++) {
       const item = cartItems[i];
-      
+
       if (!item.id) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Invalid cart item',
-          message: `Cart item at index ${i} is missing product ID` 
+          message: `Cart item at index ${i} is missing product ID`
         });
       }
-      
+
       if (!item.quantity || item.quantity <= 0) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Invalid cart item',
-          message: `Cart item at index ${i} has invalid quantity` 
+          message: `Cart item at index ${i} has invalid quantity`
         });
       }
-      
+
       // Validate UUID format for product ID
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(item.id)) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Invalid cart item',
-          message: `Cart item at index ${i} has invalid product ID format` 
+          message: `Cart item at index ${i} has invalid product ID format`
         });
       }
     }
 
     // Validate shipping address
     if (!shippingAddress || !shippingAddress.fullName || !shippingAddress.email || !shippingAddress.address) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid shipping address',
-        message: 'Shipping address must include fullName, email, and address' 
+        message: 'Shipping address must include fullName, email, and address'
       });
     }
 
@@ -84,23 +84,23 @@ export const createPaymentIntent = async (req, res) => {
     // 2. Validate all products exist and are available
     for (const cartItem of cartItems) {
       const product = products.find(p => p.id === cartItem.id);
-      
+
       if (!product) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: `Product not found`,
           message: `Product with ID ${cartItem.id} does not exist`
         });
       }
-      
+
       if (product.status !== 'active') {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: `Product unavailable`,
           message: `Product "${product.title}" is not available (status: ${product.status})`
         });
       }
-      
+
       if (product.approval_status !== 'approved') {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: `Product not approved`,
           message: `Product "${product.title}" is not approved for sale`
         });
@@ -190,9 +190,9 @@ export const createPaymentIntent = async (req, res) => {
 
   } catch (error) {
     console.error('Create Payment Intent Error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to create payment intent',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -201,7 +201,7 @@ export const createPaymentIntent = async (req, res) => {
  * Get Payment Status
  * GET /api/payments/:paymentIntentId
  */
-export const getPaymentStatus = async (req, res) => {
+const getPaymentStatus = async (req, res) => {
   try {
     const { paymentIntentId } = req.params;
 
@@ -234,7 +234,7 @@ export const getPaymentStatus = async (req, res) => {
  * Cancel Payment
  * POST /api/payments/:paymentIntentId/cancel
  */
-export const cancelPayment = async (req, res) => {
+const cancelPayment = async (req, res) => {
   try {
     const { paymentIntentId } = req.params;
     const userId = req.user?.id;
@@ -260,7 +260,7 @@ export const cancelPayment = async (req, res) => {
     // Update database
     const { error: updateError } = await supabase
       .from('payments')
-      .update({ 
+      .update({
         status: 'canceled',
         updated_at: new Date().toISOString()
       })
@@ -284,11 +284,11 @@ export const cancelPayment = async (req, res) => {
 /**
  * Create Order After Payment Success (No Webhooks)
  * POST /api/payments/create-order
- * 
+ *
  * This endpoint is called by frontend after successful payment
  * It verifies the payment with Stripe before creating the order
  */
-export const createOrderAfterPayment = async (req, res) => {
+const createOrderAfterPayment = async (req, res) => {
   try {
     const userId = req.user?.id;
     const { paymentIntentId } = req.body;
@@ -310,7 +310,7 @@ export const createOrderAfterPayment = async (req, res) => {
 
     // 2. Check if order already exists for this payment
     if (payment.order_id) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Order already created for this payment',
         order_id: payment.order_id
       });
@@ -320,7 +320,7 @@ export const createOrderAfterPayment = async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Payment not successful',
         status: paymentIntent.status
       });
@@ -333,35 +333,33 @@ export const createOrderAfterPayment = async (req, res) => {
 
     // 5. Determine if this is a guest or registered user order
     const isGuest = !userId;
-    
+
     // Try to get email from multiple sources
     let guestEmail = null;
     if (isGuest) {
       // Priority: billing address email > shipping address email > metadata guest_email
       guestEmail = billingAddress?.email || shippingAddress?.email || paymentIntent.metadata.guest_email;
-      
+
       if (!guestEmail) {
-        return res.status(400).json({ 
-          error: 'Email is required for guest orders' 
+        return res.status(400).json({
+          error: 'Email is required for guest orders'
         });
       }
     }
-    
+
     const guestPhone = isGuest ? shippingAddress?.phone : null;
 
     // Generate tracking token for guest orders
     const trackingToken = isGuest ? `TRACK-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : null;
 
     // 6. Create order (using actual orders table structure)
-    // IMPORTANT: Must satisfy check_user_or_guest constraint
-    // Either user_id OR guest_email must be set (not both, not neither)
     const orderData = {
       payment_intent_id: paymentIntentId,
       amount: paymentIntent.amount, // Amount in cents
-      basket: orderItems, // Store items array directly in basket JSONB
+      basket: orderItems,
       shipping_address: shippingAddress,
-      status: 'paid', // Payment already succeeded, so status is 'paid'
-      order_items: orderItems // Also store in order_items JSONB
+      status: 'paid',
+      order_items: orderItems
     };
 
     // Add user_id for registered users OR guest_email for guests
@@ -381,7 +379,7 @@ export const createOrderAfterPayment = async (req, res) => {
 
     if (orderError) {
       console.error('Error creating order:', orderError);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to create order',
         message: orderError.message,
         details: orderError
@@ -392,7 +390,6 @@ export const createOrderAfterPayment = async (req, res) => {
 
     // 7. Create order items and handle inventory
     for (const item of orderItems) {
-      // Create order item with subtotal
       const itemSubtotal = item.price * item.quantity;
       const { error: itemError } = await supabase
         .from('order_items')
@@ -418,7 +415,6 @@ export const createOrderAfterPayment = async (req, res) => {
         .single();
 
       if (reservation) {
-        // Convert reservation to order (deducts from inventory)
         const { error: conversionError } = await supabase.rpc('convert_reservation_to_order', {
           p_reservation_id: reservation.id,
           p_order_id: orderId
@@ -426,14 +422,12 @@ export const createOrderAfterPayment = async (req, res) => {
 
         if (conversionError) {
           console.error('Error converting reservation:', conversionError);
-          // Fallback to direct inventory deduction
           await supabase.rpc('decrement_inventory', {
             p_product_id: item.product_id,
             p_quantity: item.quantity
           });
         }
       } else {
-        // No reservation found, directly deduct inventory
         const { error: inventoryError } = await supabase.rpc('decrement_inventory', {
           p_product_id: item.product_id,
           p_quantity: item.quantity
@@ -441,15 +435,14 @@ export const createOrderAfterPayment = async (req, res) => {
 
         if (inventoryError) {
           console.error('Error updating inventory:', inventoryError);
-          // Continue anyway - inventory can be manually adjusted
         }
       }
     }
 
-    // 7. Update payment record with order_id
+    // 8. Update payment record with order_id
     const { error: updateError } = await supabase
       .from('payments')
-      .update({ 
+      .update({
         order_id: orderId,
         status: 'succeeded',
         updated_at: new Date().toISOString()
@@ -460,9 +453,8 @@ export const createOrderAfterPayment = async (req, res) => {
       console.error('Error updating payment:', updateError);
     }
 
-    // 7.5. Create notification for customer about order placement
+    // 9. Create notification for customer about order placement
     try {
-      // Only create notification for registered users (not guests)
       if (userId) {
         await notificationService.createNotification({
           user_id: userId,
@@ -470,7 +462,7 @@ export const createOrderAfterPayment = async (req, res) => {
           title: 'Order Placed Successfully',
           message: `Your order #${orderId.substring(0, 8)} has been placed successfully`,
           priority: 'high',
-          metadata: { 
+          metadata: {
             order_id: orderId,
             amount: paymentIntent.amount / 100,
             items_count: orderItems.length
@@ -479,33 +471,20 @@ export const createOrderAfterPayment = async (req, res) => {
           action_text: 'View Order',
           channels: ['in_app', 'email']
         });
-        console.log(`[Payment] Customer notification created for order ${orderId}`);
-      } else {
-        console.log(`[Payment] Skipping notification for guest order ${orderId}`);
       }
     } catch (notifError) {
       console.error('[Payment] Error creating customer notification:', notifError);
-      // Don't fail order creation if notification fails
     }
 
-    // 8. PHASE 3: Split order by seller if multi-vendor
+    // 10. Split order by seller if multi-vendor
     try {
-      console.log(`[Payment] Checking if order ${orderId} needs splitting...`);
       const splitResult = await splitOrderBySeller(orderId, orderItems);
-      
+
       if (splitResult.isSplit) {
-        console.log(`[Payment] Order split into ${splitResult.subOrders.length} sub-orders for ${splitResult.sellerCount} sellers`);
-        
-        // Notify sellers about their new orders (in-app + email)
         await notifySellers(splitResult.subOrders, orderId);
-        console.log(`[Payment] Sellers notified successfully (in-app + email)`);
-      } else {
-        console.log(`[Payment] Single seller order, no splitting needed`);
       }
     } catch (splitError) {
       console.error('[Payment] Order splitting error:', splitError);
-      // Don't fail the order creation - splitting can be done manually if needed
-      // Order is already created successfully at this point
     }
 
     res.json({
@@ -516,9 +495,9 @@ export const createOrderAfterPayment = async (req, res) => {
 
   } catch (error) {
     console.error('Create Order After Payment Error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to create order',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -527,46 +506,32 @@ export const createOrderAfterPayment = async (req, res) => {
  * ADMIN: Get all payments
  * GET /api/admin/payments
  */
-export const getAllPayments = async (req, res) => {
+const getAllPayments = async (req, res) => {
   try {
     const { status, userId, limit, offset } = req.query;
-
-    console.log('[getAllPayments] Query params:', { status, userId, limit, offset });
 
     let query = supabase
       .from('payments')
       .select('*')
       .order('created_at', { ascending: false });
 
-    // Apply filters
     if (status && status !== 'all') {
-      console.log('[getAllPayments] Applying status filter:', status);
       query = query.eq('status', status);
-    } else {
-      console.log('[getAllPayments] NOT applying status filter (status is:', status, ')');
     }
 
     if (userId) {
-      console.log('[getAllPayments] Applying userId filter:', userId);
       query = query.eq('user_id', userId);
     }
 
-    // Apply pagination
     if (limit) {
-      const limitNum = parseInt(limit);
-      const offsetNum = parseInt(offset) || 0;
-      console.log('[getAllPayments] Applying pagination:', { limitNum, offsetNum });
+      const limitNum = parseInt(limit, 10);
+      const offsetNum = parseInt(offset, 10) || 0;
       query = query.range(offsetNum, offsetNum + limitNum - 1);
     }
 
     const { data: payments, error } = await query;
 
-    if (error) {
-      console.error('[getAllPayments] Supabase error:', error);
-      throw error;
-    }
-
-    console.log('[getAllPayments] Query result:', { count: payments?.length || 0 });
+    if (error) throw error;
 
     res.json({
       success: true,
@@ -575,9 +540,9 @@ export const getAllPayments = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in getAllPayments:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch payments',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -586,14 +551,14 @@ export const getAllPayments = async (req, res) => {
  * ADMIN: Get payment statistics
  * GET /api/admin/payments/statistics
  */
-export const getPaymentStatistics = async (req, res) => {
+const getPaymentStatistics = async (req, res) => {
   try {
     const { data: payments, error } = await supabase
       .from('payments')
       .select('status, amount');
-    
+
     if (error) throw error;
-    
+
     const stats = {
       total_payments: payments?.length || 0,
       successful: 0,
@@ -615,16 +580,16 @@ export const getPaymentStatistics = async (req, res) => {
       } else if (payment.status === 'refunded') {
         stats.refunded++;
       }
-      
+
       stats.total_amount += payment.amount;
     });
-    
+
     res.json(stats);
   } catch (error) {
     console.error('Error in getPaymentStatistics:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to get payment statistics',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -633,7 +598,7 @@ export const getPaymentStatistics = async (req, res) => {
  * ADMIN: Process refund
  * POST /api/admin/payments/:id/refund
  */
-export const processRefund = async (req, res) => {
+const processRefund = async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, reason } = req.body;
@@ -644,7 +609,7 @@ export const processRefund = async (req, res) => {
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (fetchError || !payment) {
       return res.status(404).json({ error: 'Payment not found' });
     }
@@ -655,7 +620,7 @@ export const processRefund = async (req, res) => {
 
     // Determine refund amount (full or partial)
     const refundAmount = amount || payment.amount;
-    
+
     // Validate refund amount
     if (refundAmount > payment.amount) {
       return res.status(400).json({ error: 'Refund amount cannot exceed payment amount' });
@@ -675,8 +640,8 @@ export const processRefund = async (req, res) => {
     if (isPartial) {
       await supabase
         .from('payments')
-        .update({ 
-          refunded_amount: refundAmount,
+        .update({
+          refunded_amount: (payment.refunded_amount || 0) + refundAmount,
           last_refund_at: new Date().toISOString()
         })
         .eq('id', id);
@@ -705,9 +670,19 @@ export const processRefund = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in processRefund:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to process refund',
-      message: error.message 
+      message: error.message
     });
   }
+};
+
+module.exports = {
+  createPaymentIntent,
+  getPaymentStatus,
+  cancelPayment,
+  createOrderAfterPayment,
+  getAllPayments,
+  getPaymentStatistics,
+  processRefund
 };

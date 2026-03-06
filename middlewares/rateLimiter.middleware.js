@@ -73,13 +73,13 @@ const imageUploadLimiter = rateLimit({
 
 /**
  * Login attempt rate limiter
- * Limit: 1000 requests per minute per IP (disabled for testing)
+ * Limit: 5 failed requests per 15 minutes per IP
  */
 const loginAttemptLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
   message: {
-    error: 'Too many requests from this IP, please try again later.',
+    error: 'Too many login attempts from this IP, please try again after 15 minutes.',
     retryAfter: 900
   },
   standardHeaders: true,

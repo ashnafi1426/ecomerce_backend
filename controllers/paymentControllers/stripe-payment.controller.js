@@ -71,30 +71,12 @@ const createPaymentIntent = async (req, res) => {
 
     for (const cartItem of cartItems) {
       const product = products.find(p => p.id === cartItem.id);
-      
-      // Allow placeholder product ID for testing
-      if (!product && cartItem.id !== '66666666-6666-6666-6666-666666666666') {
-        return res.status(400).json({ 
-          success: false,
-          error: `Product not found: ${cartItem.id}` 
-        });
-      }
-      
-      // Handle placeholder product
-      if (cartItem.id === '66666666-6666-6666-6666-666666666666') {
-        const itemTotal = 99.99 * cartItem.quantity; // Default price for placeholder
-        totalAmount += itemTotal;
 
-        validatedItems.push({
-          product_id: cartItem.id,
-          title: 'Test Product (Placeholder)',
-          price: 99.99,
-          quantity: cartItem.quantity,
-          seller_id: 'placeholder-seller-id',
-          category_id: 1,
-          total: itemTotal
+      if (!product) {
+        return res.status(400).json({
+          success: false,
+          error: `Product not found: ${cartItem.id}`
         });
-        continue;
       }
 
       // Check stock availability (skip for now since stock_quantity doesn't exist)
@@ -201,27 +183,14 @@ const createOrderAfterPayment = async (req, res) => {
 
     // Verify payment with Stripe
     const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent_id);
-    
-    // Allow testing in development mode
-    const isTestingMode = process.env.NODE_ENV === 'development' || process.env.ALLOW_TESTING_PAYMENTS === 'true';
-    const validStatuses = ['succeeded'];
-    
-    if (isTestingMode) {
-      validStatuses.push('requires_payment_method', 'requires_confirmation');
-      console.log('[Order Creation] Testing mode enabled - accepting payment status:', paymentIntent.status);
-    }
-    
-    if (!validStatuses.includes(paymentIntent.status)) {
-      console.log('[Order Creation] Invalid payment status:', paymentIntent.status);
-      return res.status(400).json({ 
+
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({
         success: false,
         error: `Payment not completed. Status: ${paymentIntent.status}`,
-        payment_status: paymentIntent.status,
-        testing_mode: isTestingMode
+        payment_status: paymentIntent.status
       });
     }
-    
-    console.log('[Order Creation] Payment status accepted:', paymentIntent.status);
 
     // Get payment record from database
     const { data: paymentRecord, error: paymentError } = await supabase

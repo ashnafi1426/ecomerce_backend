@@ -135,9 +135,10 @@ const findAll = async (filters = {}) => {
     query = query.eq('status', filters.status);
   }
 
-  // Apply search filter
+  // Apply search filter (sanitized to prevent injection via Supabase .or())
   if (filters.search) {
-    query = query.or(`email.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%`);
+    const sanitized = filters.search.replace(/[%_\\]/g, '\\$&');
+    query = query.or(`email.ilike.%${sanitized}%,display_name.ilike.%${sanitized}%`);
   }
 
   // Apply pagination
@@ -203,9 +204,10 @@ const getTotalCount = async (filters = {}) => {
     query = query.eq('status', filters.status);
   }
 
-  // Apply search filter
+  // Apply search filter (sanitized to prevent injection via Supabase .or())
   if (filters.search) {
-    query = query.or(`email.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%`);
+    const sanitized = filters.search.replace(/[%_\\]/g, '\\$&');
+    query = query.or(`email.ilike.%${sanitized}%,display_name.ilike.%${sanitized}%`);
   }
 
   const { count, error } = await query;
@@ -323,10 +325,11 @@ const getStatistics = async (userId) => {
  * @returns {Promise<Array>} Array of user objects
  */
 const search = async (searchTerm, limit = 20) => {
+  const sanitized = searchTerm.replace(/[%_\\]/g, '\\$&');
   const { data, error } = await supabase
     .from('users')
     .select('id, email, display_name, role, status, created_at')
-    .or(`email.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%`)
+    .or(`email.ilike.%${sanitized}%,display_name.ilike.%${sanitized}%`)
     .limit(limit);
   
   if (error) throw error;

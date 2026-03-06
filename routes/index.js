@@ -107,6 +107,9 @@ const browsingHistoryRouter = safeRequire('./browsingHistoryRoutes/browsing-hist
 // Support System
 const supportRouter = safeRequire('./supportRoutes/support.routes.js', 'Support Routes');
 
+// Webhook System
+const webhookRouter = safeRequire('./webhookRoutes/webhook.routes.js', 'Webhook Routes');
+
 // Safe route mounting function
 function safeMount(router, path, routeModule, routeName) {
   if (routeModule) {
@@ -193,6 +196,9 @@ safeMount(router, '/api/browsing-history', browsingHistoryRouter, 'Browsing Hist
 
 // Support System
 safeMount(router, '/api/support', supportRouter, 'Support Routes');
+
+// Webhook System
+safeMount(router, '/api/webhooks', webhookRouter, 'Webhook Routes');
 
 // Export the router
 module.exports = router;
