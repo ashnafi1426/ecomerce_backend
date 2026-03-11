@@ -44,6 +44,7 @@ const allowedOrigins = [
   'http://localhost:3001', 
   'http://localhost:5173', // Vite dev server default
   'https://ecomerce-woas.vercel.app',
+  "https://ecomerce-pearl-nine.vercel.app",
   process.env.FRONTEND_URL
 ].filter(Boolean); // Remove undefined values
 
