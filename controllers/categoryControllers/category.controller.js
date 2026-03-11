@@ -26,20 +26,50 @@ const getAllCategories = async (req, res, next) => {
 
     if (error) throw error;
 
-    let categoriesWithStats = categories || [];
+    // Auto-fill missing slugs in memory (and persist them to DB)
+    const categoriesNeedingSlugs = (categories || []).filter(c => !c.slug);
+    if (categoriesNeedingSlugs.length > 0) {
+      for (const cat of categoriesNeedingSlugs) {
+        const generatedSlug = cat.name.toLowerCase()
+          .replace(/[&]/g, 'and')
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '');
+        cat.slug = generatedSlug;
+        // Persist silently
+        supabase.from('categories').update({ slug: generatedSlug }).eq('id', cat.id).then(() => { }).catch(() => { });
+      }
+    }
 
-    // If stats are requested, add product counts and revenue estimates
+    // Always include product_count for every category
+    const { data: productCountRows } = await supabase
+      .from('products')
+      .select('category_id')
+      .eq('approval_status', 'approved')
+      .not('category_id', 'is', null);
+
+    const countMap = {};
+    (productCountRows || []).forEach(p => {
+      countMap[p.category_id] = (countMap[p.category_id] || 0) + 1;
+    });
+
+    let categoriesWithStats = (categories || []).map(cat => ({
+      ...cat,
+      product_count: countMap[cat.id] || 0
+    }));
+
+    // If stats are requested, add additional revenue/pricing analytics
     if (includeStats === 'true' && categories) {
       const { data: products, error: productsError } = await supabase
         .from('products')
         .select('id, category_id, price, approval_status');
 
       if (!productsError && products) {
-        categoriesWithStats = categories.map(category => {
+        categoriesWithStats = categoriesWithStats.map(category => {
           const categoryProducts = products.filter(p => p.category_id === category.id);
           const approvedProducts = categoryProducts.filter(p => p.approval_status === 'approved');
-          
-          // Calculate estimated revenue
+
           const estimatedRevenue = approvedProducts.reduce((sum, product) => {
             const estimatedSales = Math.floor(Math.random() * 50) + 10;
             return sum + ((product.price || 0) * estimatedSales);
@@ -51,13 +81,21 @@ const getAllCategories = async (req, res, next) => {
             approvedProductCount: approvedProducts.length,
             pendingProductCount: categoryProducts.filter(p => p.approval_status === 'pending').length,
             estimatedRevenue,
-            averagePrice: approvedProducts.length > 0 
-              ? approvedProducts.reduce((sum, p) => sum + (p.price || 0), 0) / approvedProducts.length 
+            averagePrice: approvedProducts.length > 0
+              ? approvedProducts.reduce((sum, p) => sum + (p.price || 0), 0) / approvedProducts.length
               : 0
           };
         });
       }
     }
+
+    // Sort: categories with products first, then empty ones alphabetically
+    categoriesWithStats.sort((a, b) => {
+      if ((b.product_count || 0) !== (a.product_count || 0)) {
+        return (b.product_count || 0) - (a.product_count || 0);
+      }
+      return (a.name || '').localeCompare(b.name || '');
+    });
 
     res.json({
       success: true,
@@ -215,35 +253,44 @@ const getCategoryProducts = async (req, res, next) => {
     const { id: slugOrId } = req.params;
     const { limit = 50, offset = 0, status = 'approved', sort = 'featured' } = req.query;
 
-    // First, find the category by slug or ID
-    let categoryQuery;
-    
-    // Check if slugOrId is a number (ID) or string (slug)
-    if (!isNaN(slugOrId)) {
-      // It's an ID
-      categoryQuery = supabase
+    // Find category by UUID/ID first, then by slug, then by partial name
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let category = null;
+
+    if (!isNaN(slugOrId) || uuidRegex.test(slugOrId)) {
+      // Numeric ID or UUID — direct lookup
+      const { data } = await supabase
         .from('categories')
         .select('id, name, slug')
         .eq('id', slugOrId)
-        .single();
-    } else {
-      // It's a slug
-      categoryQuery = supabase
+        .maybeSingle();
+      category = data;
+    }
+
+    if (!category) {
+      // Try exact slug match
+      const { data } = await supabase
         .from('categories')
         .select('id, name, slug')
         .eq('slug', slugOrId)
-        .single();
+        .maybeSingle();
+      category = data;
     }
 
-    const { data: category, error: categoryError } = await categoryQuery;
-
-    if (categoryError) {
-      console.error('Category lookup error:', categoryError);
-      return res.status(404).json({
-        success: false,
-        error: 'Not Found',
-        message: `Category '${slugOrId}' not found`
-      });
+    if (!category) {
+      // Try name match: convert slug back to search pattern
+      // e.g. 'home-and-kitchen' → 'home%kitchen' (skip 'and' since DB has '&')
+      // e.g. 'sports-outdoors' → 'sports%outdoors'
+      const nameSearch = slugOrId
+        .replace(/-and-/g, '%')   // replace '-and-' with wildcard (maps to '&')
+        .replace(/-/g, '%');       // replace remaining dashes with wildcard
+      const { data } = await supabase
+        .from('categories')
+        .select('id, name, slug')
+        .ilike('name', `%${nameSearch}%`)
+        .limit(1)
+        .maybeSingle();
+      category = data;
     }
 
     if (!category) {
@@ -344,6 +391,9 @@ const createCategory = async (req, res, next) => {
       });
     }
 
+    // Auto-generate slug from name
+    const slug = name.toLowerCase().replace(/[&]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
     // Check if category already exists
     const { data: existing, error: checkError } = await supabase
       .from('categories')
@@ -364,7 +414,7 @@ const createCategory = async (req, res, next) => {
 
     const { data: category, error } = await supabase
       .from('categories')
-      .insert([{ name, description, parent_id }])
+      .insert([{ name, description, parent_id, slug }])
       .select()
       .single();
 

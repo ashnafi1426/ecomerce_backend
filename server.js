@@ -26,10 +26,10 @@ async function isPortAvailable(port) {
   });
 }
 
-// Port fallback strategy: PORT env → 4000 → 3000 → 8000 → random available
+// Port fallback strategy: PORT env → 8003 → 4000 → 8000 → random available
 async function findAvailablePort() {
-  const preferredPort = process.env.PORT ? parseInt(process.env.PORT) : 4000;
-  const fallbackPorts = [preferredPort, 4000, 3000, 8000];
+  const preferredPort = process.env.PORT ? parseInt(process.env.PORT) : 8003;
+  const fallbackPorts = [preferredPort, 8003, 4000, 8000];
   
   console.log(`🔍 Checking port availability, preferred: ${preferredPort}`);
   

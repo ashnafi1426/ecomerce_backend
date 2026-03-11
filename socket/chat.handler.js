@@ -83,6 +83,16 @@ function initializeChatHandlers(io) {
       try {
         const { conversationId, message, attachments, tempId } = data;
 
+        // Validate message content
+        if (!message && (!attachments || attachments.length === 0)) {
+          socket.emit('chat:message_failed', {
+            tempId,
+            conversationId,
+            message: 'Message content is required'
+          });
+          return;
+        }
+
         // Verify user is participant
         const { data: conversation, error } = await require('../config/supabase')
           .from('conversations')
@@ -174,7 +184,7 @@ function initializeChatHandlers(io) {
                 user_id: participantId,
                 type: 'new_message',
                 title: 'New Message',
-                message: `${senderName}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`,
+                message: `${senderName}: ${(message || '').substring(0, 50)}${(message || '').length > 50 ? '...' : ''}`,
                 priority: 'medium',
                 metadata: {
                   conversation_id: conversationId,

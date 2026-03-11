@@ -80,48 +80,8 @@ router.get('/api/seller/dashboard/stats', authenticate, requireSeller, sellerCon
 // router.post('/api/seller/payouts/request', authenticate, requireSeller, sellerController.requestPayout);
 // router.get('/api/seller/payment-account', authenticate, requireSeller, sellerController.getPaymentAccount);
 
-// Seller products (seller only) - Get seller's products
-router.get('/api/seller/products', authenticate, requireSeller, async (req, res, next) => {
-  try {
-    const sellerId = req.user.id;
-    const { limit, sort, status } = req.query;
-    const supabase = require('../../config/supabase');
-    
-    let query = supabase
-      .from('products')
-      .select('*')
-      .eq('seller_id', sellerId);
-    
-    if (status) {
-      query = query.eq('status', status);
-    }
-    
-    // Handle sorting
-    if (sort) {
-      const isDescending = sort.startsWith('-');
-      const field = isDescending ? sort.substring(1) : sort;
-      query = query.order(field === 'createdAt' ? 'created_at' : field, { ascending: !isDescending });
-    } else {
-      query = query.order('created_at', { ascending: false });
-    }
-    
-    if (limit) {
-      query = query.limit(parseInt(limit));
-    }
-    
-    const { data: products, error } = await query;
-    
-    if (error) throw error;
-    
-    res.status(200).json({
-      success: true,
-      count: products?.length || 0,
-      products: products || []
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+// Seller products (seller only) - Handled by product.routes.js mounted at /api
+// GET /api/seller/products -> product.routes.js /seller/products -> productController.getSellerProducts
 
 // Seller sub-orders (seller only) - Get orders for seller's products
 router.get('/api/seller/sub-orders', authenticate, requireSeller, async (req, res, next) => {
@@ -252,34 +212,7 @@ router.get('/api/seller/inventory', authenticate, requireSeller, async (req, res
   }
 });
 
-// Seller returns (seller only) - Get returns for seller's products
-router.get('/api/seller/returns', authenticate, requireSeller, async (req, res, next) => {
-  try {
-    const sellerId = req.user.id;
-    const supabase = require('../../config/supabase');
-    
-    // Get returns for seller - returns table has seller_id column
-    const { data: returns, error } = await supabase
-      .from('returns')
-      .select(`
-        *,
-        orders (id, created_at, amount, status),
-        users (display_name, email)
-      `)
-      .eq('seller_id', sellerId)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    res.status(200).json({
-      success: true,
-      count: returns?.length || 0,
-      returns: returns || []
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+// Seller returns — handled by return.routes.js (GET /api/seller/returns + /api/seller/returns/stats)
 
 // Seller reviews (seller only) - Get reviews for seller's products
 router.get('/api/seller/reviews', authenticate, requireSeller, async (req, res, next) => {

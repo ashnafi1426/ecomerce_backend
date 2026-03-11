@@ -1,5 +1,4 @@
 const supabase = require('../../config/supabase');
-const paymentService = require('../paymentServices/payment.service');
 const orderService = require('../orderServices/order.service');
 
 /**
@@ -453,22 +452,57 @@ class EnhancedRefundService {
   }
 
   /**
-   * Process payment refund through payment gateway
+   * Process payment refund through Stripe payment gateway
    * @param {string} orderId - Order UUID
    * @param {number} amount - Refund amount
-   * @returns {Promise<void>}
+   * @param {Object} commissionAdjustment - Commission adjustment data
+   * @returns {Promise<Object>} Refund result
    */
-  async processPaymentRefund(orderId, amount) {
+  async processPaymentRefund(orderId, amount, commissionAdjustment = {}) {
     try {
-      // This would integrate with actual payment gateway (Stripe, etc.)
-      // For now, we'll just log it
-      console.log(`Processing refund for order ${orderId}: $${amount}`);
-      
-      // In production, you would call:
-      // await paymentService.processRefund(orderId, amount);
-      
-      return { success: true, amount };
+      // Get order payment intent
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select('payment_intent_id')
+        .eq('id', orderId)
+        .single();
+
+      if (orderError || !order) {
+        console.warn(`No order found for refund: ${orderId}`);
+        return { success: false, reason: 'Order not found' };
+      }
+
+      const paymentIntentId = order.payment_intent_id;
+      const isRealStripePI = paymentIntentId && paymentIntentId.startsWith('pi_');
+
+      // Only process Stripe refund for real payment intents
+      if (!isRealStripePI) {
+        console.log(`Refund for order ${orderId}: non-Stripe payment (${paymentIntentId || 'none'}), marked as manual refund`);
+        return { success: true, amount, manual: true };
+      }
+
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const refundAmountCents = Math.round(amount * 100);
+
+      const refund = await stripe.refunds.create({
+        payment_intent: paymentIntentId,
+        amount: refundAmountCents,
+        reason: 'requested_by_customer',
+        metadata: {
+          order_id: orderId,
+          commission: commissionAdjustment.commission ? String(commissionAdjustment.commission) : undefined,
+          seller_deduction: commissionAdjustment.sellerAmount ? String(commissionAdjustment.sellerAmount) : undefined
+        }
+      });
+
+      console.log(`Stripe refund processed for order ${orderId}: ${refund.id}, $${amount}`);
+      return { success: true, refund_id: refund.id, amount };
     } catch (error) {
+      // If the PaymentIntent was never charged, nothing to refund
+      if (error.message && error.message.includes('does not have a successful charge')) {
+        console.log(`Order ${orderId} — PaymentIntent was never charged, no refund needed`);
+        return { success: true, amount, no_charge: true };
+      }
       console.error('Error processing payment refund:', error);
       throw error;
     }
@@ -486,10 +520,10 @@ class EnhancedRefundService {
         .select(`
           *,
           refund_images (*),
-          orders (id, amount, status),
-          customers:customer_id (email, display_name),
-          sellers:seller_id (email, display_name),
-          reviewers:reviewed_by (email, display_name)
+          order:orders (id, amount, status),
+          customer:users!customer_id (id, email, display_name),
+          seller:users!seller_id (id, email, display_name),
+          reviewer:users!reviewed_by (id, email, display_name)
         `)
         .eq('id', refundId)
         .single();
@@ -516,8 +550,8 @@ class EnhancedRefundService {
         .from('refund_details')
         .select(`
           *,
-          orders (id, amount),
-          customers:customer_id (email, display_name)
+          order:orders (id, amount),
+          customer:users!customer_id (id, email, display_name)
         `, { count: 'exact' });
 
       if (status) query = query.eq('status', status);

@@ -342,6 +342,188 @@ const getSellerStatus = async (req, res, next) => {
   }
 };
 
+/**
+ * Refresh JWT token
+ * POST /api/auth/refresh-token
+ */
+const refreshToken = async (req, res, next) => {
+  try {
+    // User is attached by authenticate middleware
+    const user = await userService.findById(req.user.id);
+
+    if (!user || user.status !== 'active') {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User account is not active'
+      });
+    }
+
+    // Generate a fresh token with the same payload
+    const token = generateToken({
+      userId: user.id,
+      role: user.role
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        displayName: user.display_name
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Request password reset
+ * POST /api/auth/forgot-password
+ */
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Email is required'
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Invalid email format'
+      });
+    }
+
+    const user = await userService.findByEmail(email);
+
+    // Always respond with success to prevent email enumeration
+    if (!user) {
+      return res.json({
+        message: 'If an account with that email exists, a password reset link has been sent.'
+      });
+    }
+
+    // Generate a cryptographically secure token
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Store token in database
+    const supabase = require('../../config/supabase');
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('user_id', user.id); // Remove any existing tokens for this user
+
+    await supabase
+      .from('password_reset_tokens')
+      .insert({
+        user_id: user.id,
+        token_hash: resetTokenHash,
+        expires_at: expiresAt.toISOString()
+      });
+
+    // In production, send an email. Here we return token in response for now.
+    // TODO: Replace with actual email service call
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+    console.log(`[Password Reset] Reset URL for ${email}: ${resetUrl}`);
+
+    res.json({
+      message: 'If an account with that email exists, a password reset link has been sent.',
+      // Only include resetUrl in development for testing
+      ...(process.env.NODE_ENV === 'development' && { resetUrl })
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Reset password with token
+ * POST /api/auth/reset-password
+ */
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, email, newPassword } = req.body;
+
+    if (!token || !email || !newPassword) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Token, email, and new password are required'
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Password must be at least 8 characters'
+      });
+    }
+
+    const crypto = require('crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const supabase = require('../../config/supabase');
+
+    // Find the reset token
+    const { data: resetRecord, error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .select('*, users!inner(email)')
+      .eq('token_hash', tokenHash)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+
+    if (tokenError || !resetRecord) {
+      return res.status(400).json({
+        error: 'Invalid Token',
+        message: 'Password reset link is invalid or has expired'
+      });
+    }
+
+    // Verify email matches
+    if (resetRecord.users.email !== email) {
+      return res.status(400).json({
+        error: 'Invalid Token',
+        message: 'Password reset link is invalid or has expired'
+      });
+    }
+
+    // Hash new password
+    const passwordHash = await hashPassword(newPassword);
+
+    // Update user password
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        password_hash: passwordHash,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', resetRecord.user_id);
+
+    if (updateError) throw updateError;
+
+    // Delete used token
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('token_hash', tokenHash);
+
+    res.json({ message: 'Password reset successfully. You can now log in with your new password.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -349,5 +531,9 @@ module.exports = {
   updateProfile,
   // Phase 2: Seller registration
   registerSeller,
-  getSellerStatus
+  getSellerStatus,
+  refreshToken,
+  // Password reset flow
+  forgotPassword,
+  resetPassword
 };

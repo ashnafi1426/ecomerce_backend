@@ -6,6 +6,8 @@
  */
 
 const productService = require('../../services/productServices/product.service');
+const { processQuery, SYNONYM_MAP } = require('../../utils/searchQueryProcessor');
+const supabase = require('../../config/supabase');
 
 /**
  * Get all products (role-based visibility)
@@ -80,15 +82,15 @@ const getProductById = async (req, res, next) => {
     if (!user || user.role === 'customer') {
       // Public/Customer - only approved products
       if (product.approval_status !== 'approved') {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Not Found',
-          message: 'Product not found' 
+          message: 'Product not found'
         });
       }
     } else if (user.role === 'seller') {
       // Sellers - only their own products
       if (product.seller_id !== user.id) {
-        return res.status(403).json({ 
+        return res.status(403).json({
           error: 'Forbidden',
           message: 'You can only view your own products' 
         });
@@ -104,27 +106,65 @@ const getProductById = async (req, res, next) => {
 
 /**
  * Search products (role-based visibility)
- * GET /api/products/search?q=laptop
+ * GET /api/products/search?q=laptop&categoryId=xxx&minPrice=10&maxPrice=100&minRating=4&sort=price_asc
  */
 const searchProducts = async (req, res, next) => {
   try {
-    const { q, limit = 20 } = req.query;
+    const { q, categoryId, category, minPrice, maxPrice, minRating, sort, limit = 50 } = req.query;
     const user = req.user;
 
-    if (!q) {
-      return res.status(400).json({ 
+    if (!q && !category && !categoryId) {
+      return res.status(400).json({
         error: 'Validation Error',
-        message: 'Search query is required' 
+        message: 'Search query or category is required'
       });
     }
 
     const filters = {
-      searchTerm: q,
-      limit: parseInt(limit)
+      searchTerm: q || null,
+      limit: parseInt(limit),
+      sort: sort || 'featured'
     };
+
+    // Category filter - support categoryId (UUID), category slug/name, or UUID passed as category
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (categoryId) {
+      filters.categoryId = categoryId;
+    } else if (category && category !== 'all' && category !== 'All') {
+      if (uuidRegex.test(category)) {
+        // UUID passed as category param — use directly
+        filters.categoryId = category;
+      } else {
+        // Resolve category slug/name to ID
+        const supabase = require('../../config/supabase');
+        const { data: cat } = await supabase
+          .from('categories')
+          .select('id')
+          .or(`slug.eq.${category},name.ilike.%${category}%`)
+          .limit(1)
+          .maybeSingle();
+        if (cat) {
+          filters.categoryId = cat.id;
+        }
+      }
+    }
+
+    // Price range filters
+    if (minPrice !== undefined && !isNaN(parseFloat(minPrice))) {
+      filters.minPrice = parseFloat(minPrice);
+    }
+    if (maxPrice !== undefined && !isNaN(parseFloat(maxPrice))) {
+      filters.maxPrice = parseFloat(maxPrice);
+    }
+
+    // Rating filter
+    if (minRating !== undefined && !isNaN(parseFloat(minRating))) {
+      filters.minRating = parseFloat(minRating);
+    }
 
     // Apply role-based visibility
     if (!user || user.role === 'customer') {
+      filters.status = 'active';
       filters.approvalStatus = 'approved';
     } else if (user.role === 'seller') {
       filters.sellerId = user.id;
@@ -151,40 +191,40 @@ const createProduct = async (req, res, next) => {
     console.log('📦 Create product request from seller:', req.user?.id);
     console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
     console.log('📦 Request headers:', JSON.stringify(req.headers, null, 2));
-    
+
     const { title, description, price, imageUrl, categoryId, initialQuantity, lowStockThreshold } = req.body;
     const sellerId = req.user?.id;
 
     // Enhanced validation
     if (!sellerId) {
       console.log('❌ Validation failed: no seller ID in request');
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Authentication Error',
-        message: 'Seller ID not found in request. Please login again.' 
+        message: 'Seller ID not found in request. Please login again.'
       });
     }
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       console.log('❌ Validation failed: invalid title');
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Validation Error',
-        message: 'Title is required and must be a non-empty string' 
+        message: 'Title is required and must be a non-empty string'
       });
     }
 
     if (!description || typeof description !== 'string' || description.trim().length === 0) {
       console.log('❌ Validation failed: invalid description');
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Validation Error',
-        message: 'Description is required and must be a non-empty string' 
+        message: 'Description is required and must be a non-empty string'
       });
     }
 
     if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
       console.log('❌ Validation failed: invalid price:', price);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Validation Error',
-        message: 'Price is required and must be a positive number' 
+        message: 'Price is required and must be a positive number'
       });
     }
 
@@ -511,10 +551,89 @@ const rejectProduct = async (req, res, next) => {
   }
 };
 
+/**
+ * Autocomplete / search suggestions
+ * GET /api/products/autocomplete?q=pho
+ *
+ * Returns up to 8 suggestions combining:
+ *  - Matching product titles from DB
+ *  - Related synonym/concept terms
+ *  - Category names
+ */
+const autocomplete = async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q || q.length < 2) return res.json({ suggestions: [] });
+
+    const lower = q.toLowerCase();
+
+    // 1. Expand with synonyms to show conceptually related hints
+    const { expandedTerms } = processQuery(q);
+
+    // 2. Fetch matching product titles from DB (approved active products only)
+    const orParts = [q, ...expandedTerms.slice(0, 5)]
+      .map(t => `title.ilike.%${t}%`)
+      .join(',');
+
+    const { data: products } = await supabase
+      .from('products')
+      .select('title')
+      .eq('approval_status', 'approved')
+      .eq('status', 'active')
+      .or(orParts)
+      .limit(15);
+
+    // 3. Fetch matching category names
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('name')
+      .ilike('name', `%${lower}%`)
+      .limit(5);
+
+    const seen = new Set();
+    const suggestions = [];
+
+    // Add product title matches first
+    for (const p of (products || [])) {
+      const title = p.title;
+      const titleLower = title.toLowerCase();
+      // Only add if it starts with or contains the query
+      if ((titleLower.startsWith(lower) || titleLower.includes(lower)) && !seen.has(titleLower)) {
+        seen.add(titleLower);
+        suggestions.push({ type: 'product', text: title });
+        if (suggestions.length >= 5) break;
+      }
+    }
+
+    // Add category name matches
+    for (const c of (categories || [])) {
+      const name = c.name;
+      if (!seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        suggestions.push({ type: 'category', text: name });
+      }
+    }
+
+    // Add synonym-based concept hints if slots remain
+    const conceptHints = Object.keys(SYNONYM_MAP)
+      .filter(k => k.startsWith(lower) && !seen.has(k))
+      .slice(0, 3);
+    for (const hint of conceptHints) {
+      seen.add(hint);
+      suggestions.push({ type: 'suggestion', text: hint });
+    }
+
+    res.json({ suggestions: suggestions.slice(0, 8) });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllProducts,
   getProductById,
   searchProducts,
+  autocomplete,
   createProduct,
   updateProduct,
   deleteProduct,

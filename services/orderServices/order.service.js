@@ -57,12 +57,18 @@ const findByUserId = async (userId, filters = {}) => {
   }
 
   const { data, error } = await query;
-  
+
   if (error) throw error;
-  
-  // Transform basket to items array for frontend compatibility
-  const orders = await Promise.all((data || []).map(async (order) => {
-    // Get basket items - handle both array and object formats
+
+  const orders = data || [];
+
+  // ---------------------------------------------------------------
+  // BATCH PRODUCT LOOKUP: collect all unique product IDs from every
+  // order's basket in one pass, then fetch them in a single query.
+  // Avoids N+1 pattern (was: 1 query per item × items per order).
+  // ---------------------------------------------------------------
+  const productIdSet = new Set();
+  const orderBaskets = orders.map((order) => {
     let basketItems = [];
     if (Array.isArray(order.basket)) {
       basketItems = order.basket;
@@ -71,15 +77,29 @@ const findByUserId = async (userId, filters = {}) => {
     } else if (order.order_items) {
       basketItems = order.order_items;
     }
-    
-    // Fetch product details for each item
-    const itemsWithDetails = await Promise.all(basketItems.map(async (item) => {
-      const { data: product } = await supabase
-        .from('products')
-        .select('id, title, image_url, price')
-        .eq('id', item.product_id)
-        .single();
-      
+    basketItems.forEach((item) => {
+      if (item.product_id) productIdSet.add(item.product_id);
+    });
+    return basketItems;
+  });
+
+  // Single batch query for all products referenced across all orders
+  let productMap = {};
+  if (productIdSet.size > 0) {
+    const { data: products } = await supabase
+      .from('products')
+      .select('id, title, image_url, price')
+      .in('id', Array.from(productIdSet));
+    (products || []).forEach((p) => {
+      productMap[p.id] = p;
+    });
+  }
+
+  // Enrich each order's items using the pre-fetched product map
+  return orders.map((order, idx) => {
+    const basketItems = orderBaskets[idx];
+    const items = basketItems.map((item) => {
+      const product = productMap[item.product_id];
       return {
         ...item,
         product: product || {
@@ -89,16 +109,13 @@ const findByUserId = async (userId, filters = {}) => {
           price: item.price
         }
       };
-    }));
-    
+    });
     return {
       ...order,
-      items: itemsWithDetails,
+      items,
       total: order.amount / 100 // Convert cents to dollars
     };
-  }));
-  
-  return orders;
+  });
 };
 
 /**

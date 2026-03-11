@@ -1,59 +1,71 @@
 /**
- * RETURN ROUTES
- *
- * Routes for return/refund operations.
+ * RETURN ROUTES — Amazon-Style Full Workflow
  *
  * IMPORTANT: Static routes MUST come before parameterized routes
  */
 
 const express = require('express');
 const router = express.Router();
-const returnController = require('../../controllers/returnControllers/return.controller');
+const rc = require('../../controllers/returnControllers/return.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
-const { requireAdmin } = require('../../middlewares/role.middleware');
+const { requireAdmin, requireSeller } = require('../../middlewares/role.middleware');
 
 // ============================================
-// STATIC ROUTES (must come BEFORE /:id)
+// STATIC ROUTES (before /:id)
 // ============================================
 
-// Get user's returns
-router.get('/api/returns/user/me', authenticate, returnController.getMyReturns);
+// Customer: my returns
+router.get('/api/returns/user/me', authenticate, rc.getMyReturns);
 
-// Get recent returns (admin only)
-router.get('/api/returns/recent', authenticate, requireAdmin, returnController.getRecentReturns);
+// Seller: returns for their products
+router.get('/api/seller/returns/stats', authenticate, requireSeller, rc.getSellerReturnStats);
+router.get('/api/seller/returns',       authenticate, requireSeller, rc.getSellerReturns);
 
-// Get pending returns count (admin only)
-router.get('/api/returns/stats/pending-count', authenticate, requireAdmin, returnController.getPendingCount);
+// Seller: action routes (Amazon Seller Central style)
+router.post('/api/seller/returns/:id/authorize',    authenticate, requireSeller, rc.sellerAuthorizeReturn);
+router.post('/api/seller/returns/:id/close',        authenticate, requireSeller, rc.sellerCloseReturn);
+router.post('/api/seller/returns/:id/receive',      authenticate, requireSeller, rc.sellerMarkReceived);
+router.post('/api/seller/returns/:id/inspect',      authenticate, requireSeller, rc.sellerInspectReturn);
+router.post('/api/seller/returns/:id/issue-refund', authenticate, requireSeller, rc.sellerIssueRefund);
+router.post('/api/seller/returns/:id/retry-refund', authenticate, requireSeller, rc.sellerRetryRefund);
 
-// Get return statistics (admin only)
-router.get('/api/returns/stats', authenticate, requireAdmin, returnController.getStatistics);
+// Admin: recent, stats, all
+router.get('/api/returns/recent',             authenticate, requireAdmin, rc.getRecentReturns);
+router.get('/api/returns/stats/pending-count', authenticate, requireAdmin, rc.getPendingCount);
+router.get('/api/returns/stats',              authenticate, requireAdmin, rc.getStatistics);
+router.get('/api/returns',                    authenticate, requireAdmin, rc.getAllReturns);
 
-// Create return request
-router.post('/api/returns', authenticate, returnController.createReturn);
-
-// Get all returns (admin only)
-router.get('/api/returns', authenticate, requireAdmin, returnController.getAllReturns);
+// Create return request (authenticated customer)
+router.post('/api/returns', authenticate, rc.createReturn);
 
 // ============================================
-// PARAMETERIZED ROUTES (must come AFTER static routes)
+// PARAMETERIZED — ORDER ID
 // ============================================
 
-// Get returns by order ID
-router.get('/api/returns/order/:orderId', authenticate, returnController.getReturnsByOrder);
+router.get('/api/returns/order/:orderId', authenticate, rc.getReturnsByOrder);
 
-// Get return by ID
-router.get('/api/returns/:id', authenticate, returnController.getReturnById);
+// ============================================
+// PARAMETERIZED — RETURN ID
+// ============================================
 
-// Update return status (admin only)
-router.patch('/api/returns/:id/status', authenticate, requireAdmin, returnController.updateReturnStatus);
+// Read
+router.get('/api/returns/:id', authenticate, rc.getReturnById);
 
-// Approve return (admin only)
-router.post('/api/returns/:id/approve', authenticate, requireAdmin, returnController.approveReturn);
+// Customer: shipping info + images
+router.post('/api/returns/:id/shipping', authenticate, rc.updateShippingInfo);
+router.put('/api/returns/:id/images',    authenticate, rc.updateImages);
 
-// Reject return (admin only)
-router.post('/api/returns/:id/reject', authenticate, requireAdmin, returnController.rejectReturn);
+// Admin: status workflow
+router.patch('/api/returns/:id/status',         authenticate, requireAdmin, rc.updateReturnStatus);
+router.post('/api/returns/:id/approve',         authenticate, requireAdmin, rc.approveReturn);
+router.post('/api/returns/:id/reject',          authenticate, requireAdmin, rc.rejectReturn);
+router.post('/api/returns/:id/mark-received',   authenticate, requireAdmin, rc.markReturnReceived);
+router.post('/api/returns/:id/mark-inspecting', authenticate, requireAdmin, rc.markReturnInspecting);
+router.post('/api/returns/:id/mark-inspected',  authenticate, requireAdmin, rc.markReturnInspected);
+router.post('/api/returns/:id/complete',        authenticate, requireAdmin, rc.completeReturn);
+router.post('/api/returns/:id/retry-refund',    authenticate, requireAdmin, rc.adminRetryRefund);
 
-// Complete return (admin only)
-router.post('/api/returns/:id/complete', authenticate, requireAdmin, returnController.completeReturn);
+// Customer: cancel their own pending return
+router.post('/api/returns/:id/cancel', authenticate, rc.cancelReturn);
 
 module.exports = router;

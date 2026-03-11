@@ -6,6 +6,7 @@
  */
 
 const supabase = require('../../config/supabase');
+const { processQuery, scoreProduct } = require('../../utils/searchQueryProcessor');
 
 /**
  * Find product by ID
@@ -81,39 +82,158 @@ const findAll = async (filters = {}) => {
 };
 
 /**
- * Search products by title
- * @param {Object} filters - Search filters
- * @returns {Promise<Array>} Array of product objects
+ * Semantic search — understands meaning, synonyms, typos and intent.
+ *
+ * Pipeline:
+ *  1. processQuery()  → expand tokens with synonyms, detect intent / brand
+ *  2. Supabase fetch  → broad OR filter on expanded terms + hard filters
+ *  3. scoreProduct()  → multi-factor relevance ranking in JS
+ *  4. Sort override   → applies price/quality/new intent on final list
+ *
+ * @param {Object} filters - Search filters from controller
+ * @returns {Promise<Array>} Ranked array of product objects
  */
 const search = async (filters) => {
-  let query = supabase
-    .from('products')
-    .select(`
-      *,
-      category:categories(id, name),
-      inventory(quantity),
-      seller:users!products_seller_id_fkey(id, display_name, business_name)
-    `)
-    .ilike('title', `%${filters.searchTerm}%`)
-    .limit(filters.limit || 20);
+  const rawSearchTerm = (filters.searchTerm || '').trim();
 
-  if (filters.approvalStatus) {
-    query = query.eq('approval_status', filters.approvalStatus);
+  // ── 1. Query Understanding ────────────────────────────────────────────────
+  const queryInfo = processQuery(rawSearchTerm);
+  const { expandedTerms, tokens, sortOverride, brandHints } = queryInfo;
+
+  // Use intent-based sort if caller didn't specify an explicit sort
+  const effectiveSort = (filters.sort && filters.sort !== 'featured')
+    ? filters.sort
+    : (sortOverride || filters.sort || 'featured');
+
+  // ── 2. Build base Supabase query ─────────────────────────────────────────
+  const selectClause = `
+    *,
+    category:categories(id, name),
+    inventory(quantity, reserved_quantity),
+    seller:users!products_seller_id_fkey(id, display_name, business_name)
+  `;
+
+  let query = supabase.from('products').select(selectClause);
+
+  // Hard filters (always applied regardless of search term)
+  if (filters.approvalStatus) query = query.eq('approval_status', filters.approvalStatus);
+  if (filters.sellerId)       query = query.eq('seller_id', filters.sellerId);
+  if (filters.status)         query = query.eq('status', filters.status);
+  if (filters.categoryId)     query = query.eq('category_id', filters.categoryId);
+  if (filters.minPrice !== undefined) query = query.gte('price', filters.minPrice);
+  if (filters.maxPrice !== undefined) query = query.lte('price', filters.maxPrice);
+  if (filters.minRating !== undefined) query = query.gte('average_rating', filters.minRating);
+
+  // ── 3. Build expanded OR text filter ─────────────────────────────────────
+  // Use at most 20 most relevant expanded terms to keep the query manageable
+  if (rawSearchTerm && expandedTerms.length > 0) {
+    const termsToSearch = expandedTerms.slice(0, 20);
+
+    const orParts = termsToSearch.flatMap(term => [
+      `title.ilike.%${term}%`,
+      `brand.ilike.%${term}%`,
+      `description.ilike.%${term}%`,
+    ]);
+
+    query = query.or(orParts.join(','));
   }
 
-  if (filters.sellerId) {
-    query = query.eq('seller_id', filters.sellerId);
-  }
+  // Fetch a generous pool for JS-side re-ranking
+  query = query.limit(500);
 
-  if (filters.status) {
-    query = query.eq('status', filters.status);
-  }
-  
   const { data, error } = await query;
-  
   if (error) throw error;
-  
-  return data || [];
+
+  let results = data || [];
+
+  // ── 4. Supplement: fetch by category name match ───────────────────────────
+  // Supabase OR doesn't traverse joined tables; do a separate pass
+  if (rawSearchTerm && results.length < 500) {
+    const catOrParts = expandedTerms.slice(0, 10).map(t => `name.ilike.%${t}%`);
+    const { data: catMatches } = await supabase
+      .from('categories')
+      .select('id')
+      .or(catOrParts.join(','));
+
+    if (catMatches && catMatches.length > 0) {
+      const catIds = catMatches.map(c => c.id);
+      const existingIds = new Set(results.map(r => r.id));
+
+      let catQ = supabase.from('products').select(selectClause).in('category_id', catIds);
+      if (filters.approvalStatus) catQ = catQ.eq('approval_status', filters.approvalStatus);
+      if (filters.sellerId)       catQ = catQ.eq('seller_id', filters.sellerId);
+      if (filters.status)         catQ = catQ.eq('status', filters.status);
+      if (filters.minPrice !== undefined) catQ = catQ.gte('price', filters.minPrice);
+      if (filters.maxPrice !== undefined) catQ = catQ.lte('price', filters.maxPrice);
+      catQ = catQ.limit(200);
+
+      const { data: catProds } = await catQ;
+      if (catProds) {
+        for (const p of catProds) {
+          if (!existingIds.has(p.id)) results.push(p);
+        }
+      }
+    }
+  }
+
+  // ── 5. Semantic scoring & ranking ─────────────────────────────────────────
+  if (rawSearchTerm) {
+    results = results
+      .map(product => ({
+        ...product,
+        _score: scoreProduct(product, queryInfo),
+      }))
+      .filter(p => p._score > 0)    // drop zero-score results (irrelevant)
+      .sort((a, b) => b._score - a._score)
+      .map(({ _score, ...product }) => product);
+  }
+
+  // ── 6. Apply sort (after semantic ranking for non-relevance sorts) ─────────
+  // Only apply non-relevance sorts when user explicitly requested them
+  // OR when query intent implies a sort (cheap → price_asc, etc.)
+  if (rawSearchTerm && effectiveSort !== 'featured') {
+    switch (effectiveSort) {
+      case 'price_asc':
+        results.sort((a, b) => Number(a.price) - Number(b.price));
+        break;
+      case 'price_desc':
+        results.sort((a, b) => Number(b.price) - Number(a.price));
+        break;
+      case 'rating':
+        results.sort((a, b) => (parseFloat(b.average_rating) || 0) - (parseFloat(a.average_rating) || 0));
+        break;
+      case 'newest':
+        results.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        break;
+    }
+  } else if (!rawSearchTerm) {
+    // No search term — apply DB-level sort semantics in JS
+    switch (effectiveSort) {
+      case 'price_asc':
+        results.sort((a, b) => Number(a.price) - Number(b.price));
+        break;
+      case 'price_desc':
+        results.sort((a, b) => Number(b.price) - Number(a.price));
+        break;
+      case 'rating':
+        results.sort((a, b) => (parseFloat(b.average_rating) || 0) - (parseFloat(a.average_rating) || 0));
+        break;
+      case 'newest':
+        results.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        break;
+      default:
+        results.sort((a, b) => {
+          const fa = b.is_featured ? 1 : 0;
+          const fb = a.is_featured ? 1 : 0;
+          if (fa !== fb) return fa - fb;
+          return (Number(b.total_sales) || 0) - (Number(a.total_sales) || 0);
+        });
+    }
+  }
+
+  // ── 7. Apply limit ────────────────────────────────────────────────────────
+  const limit = filters.limit || 50;
+  return results.slice(0, limit);
 };
 
 /**

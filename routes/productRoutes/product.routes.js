@@ -21,6 +21,9 @@ router.get('/products', optionalAuthenticate, productController.getAllProducts);
 // Search products (role-based visibility with optional auth)
 router.get('/products/search', optionalAuthenticate, productController.searchProducts);
 
+// Autocomplete suggestions (public)
+router.get('/products/autocomplete', productController.autocomplete);
+
 // Get product details (only approved products visible)
 router.get('/products/:id', optionalAuthenticate, productController.getProductById);
 

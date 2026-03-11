@@ -1,15 +1,4 @@
-/**
- * USER SEARCH CONTROLLER
- * 
- * Controller for user search functionality (chat)
- */
-
 const userService = require('../../services/userServices/user.service');
-
-/**
- * Search users for chat
- * GET /api/users/search
- */
 const searchUsersForChat = async (req, res) => {
   try {
     const { q, role, limit = 20 } = req.query;

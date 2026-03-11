@@ -12,26 +12,12 @@ const { requireRole, requireAnyRole } = require('../../middlewares/role.middlewa
 
 const router = express.Router();
 
-/**
- * Public Routes
- */
-
-// Check product availability (public)
-router.get('/check/:productId', checkAvailability);
-
-/**
- * Authenticated Routes (Customer)
- */
+// =====================================================
+// STATIC ROUTES (must come BEFORE parameterized routes)
+// =====================================================
 
 // Reserve inventory during checkout (requires authentication)
 router.post('/reserve', authenticate, reserveInventory);
-
-// Release reservation (requires authentication)
-router.post('/release/:reservationId', authenticate, releaseReservation);
-
-/**
- * Admin/Manager Routes
- */
 
 // Get inventory status
 router.get('/status', authenticate, requireAnyRole(['admin', 'manager']), getInventoryStatus);
@@ -41,5 +27,15 @@ router.get('/reservations', authenticate, requireAnyRole(['admin', 'manager']), 
 
 // Expire old reservations (cron job endpoint)
 router.post('/expire-reservations', authenticate, requireRole('admin'), expireOldReservations);
+
+// =====================================================
+// PARAMETERIZED ROUTES (must come AFTER static routes)
+// =====================================================
+
+// Check product availability (public)
+router.get('/check/:productId', checkAvailability);
+
+// Release reservation (requires authentication)
+router.post('/release/:reservationId', authenticate, releaseReservation);
 
 module.exports = router;

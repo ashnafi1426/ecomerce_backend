@@ -56,4 +56,11 @@ router.put(
 // Phase 2: Seller status check
 router.get('/seller/status', authenticate, authController.getSellerStatus);
 
+// Token refresh (requires valid current token)
+router.post('/refresh-token', authenticate, authController.refreshToken);
+
+// Password reset flow
+router.post('/forgot-password', sanitizeInput, authController.forgotPassword);
+router.post('/reset-password', sanitizeInput, authController.resetPassword);
+
 module.exports = router;

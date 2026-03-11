@@ -1,5 +1,5 @@
-import express from 'express';
-import { handleStripeWebhook } from '../../controllers/webhookControllers/webhook.controller.js';
+const express = require('express');
+const { handleStripeWebhook } = require('../../controllers/webhookControllers/webhook.controller.js');
 
 const router = express.Router();
 
@@ -8,4 +8,4 @@ const router = express.Router();
 // Configure in main app.js BEFORE express.json() middleware
 router.post('/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
-export default router;
+module.exports = router;

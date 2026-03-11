@@ -538,10 +538,8 @@ const searchUsersForChat = async (query, role = null, limit = 20) => {
 
     // Search in multiple fields
     if (query && query.trim()) {
-      queryBuilder = queryBuilder.or(`
-        email.ilike.%${query}%,
-        full_name.ilike.%${query}%
-      `);
+      const sanitized = query.replace(/[%_\\]/g, '\\$&');
+      queryBuilder = queryBuilder.or(`email.ilike.%${sanitized}%,full_name.ilike.%${sanitized}%`);
     }
 
     const { data, error } = await queryBuilder;

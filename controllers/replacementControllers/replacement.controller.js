@@ -31,7 +31,6 @@ class ReplacementController {
           message: 'Missing required fields: order_id, product_id, reason_category, reason_description'
         });
       }
-
       const requestData = {
         order_id,
         product_id,
